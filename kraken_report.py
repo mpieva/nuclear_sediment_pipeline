@@ -1,5 +1,6 @@
 import sys
 from csv import reader
+from Bio import SeqIO
 from collections import defaultdict
 import argparse
 import os
@@ -18,12 +19,18 @@ parser.add_argument('--minp', default=0.0, type=float,
 parser.add_argument('--min', default=0, type=int,
                     help='Filter on the minimum sequences for this clade')
 parser.add_argument('--rank',  help='Only return clades for specified rank')
+parser.add_argument('--extractFile',  help='Fasta file where to extract seqence')
 parser.add_argument('infile', metavar="kraken.output")
 
 args = parser.parse_args()
+
 db_prefix = os.path.abspath(args.db)
 if args.rank and len(args.rank) > 1:
     args.rank = rank_code(rank)
+
+seq_ids = defaultdict(list)
+extract_ids = []
+
 # remember to use filtered nodes.dmp and names.dmp
 def load_taxonomy(db_prefix):
     name_map = {}
@@ -59,18 +66,27 @@ def rank_code(rank):
     if rank == "superkingdom": return "D"
     return "-"
 
+def extract_seq_from_id(fileout, id_list, seqfile):
+    num_seq_to_extract = len(id_list)
+    with open(fileout+".fa", 'w') as fout:
+        for rec in SeqIO.parse(seqfile, 'fasta'):
+            if not num_seq_to_extract:
+                break
+            if rec.id in id_list:
+                num_seq_to_extract -= 1
+                #print(rec, file=sys.stderr)
+                SeqIO.write(rec,fout,'fasta')
 
 def dfs_report (node, depth):
+    global extract_ids
     t_counts, c_counts, rank = taxo_counts[node], clade_counts[node], rank_map[node]
-    #filter on min seqences on clade
-    if (not c_counts and not args.zeros) or c_counts < args.min:
+    if (not c_counts and not args.zeros):
         return
     c_counts_percent = round(c_counts * 100 / seq_count, 2)
+    #filter on min seqences on clade
     #filter on min percent
-    if c_counts_percent < args.minp:
-        return
     #filter on rank
-    if not args.rank or (args.rank == rank_code(rank)):
+    if not args.rank or (args.rank == rank_code(rank)) and (c_counts >= args.min and c_counts_percent >= args.minp):
         print ("{:6.2f}\t{}\t{}\t{}\t{}\t{}{}".format(
             c_counts_percent,
             c_counts,
@@ -79,6 +95,8 @@ def dfs_report (node, depth):
             node,
             "  " * depth,
             name_map[node]))
+    # start saving the sequence mames for this clade
+    if args.rank == rank_code(rank): extract_ids = []
     children = child_lists[node]
     if len(children):
         sorted_children = sorted(children, key=lambda k: clade_counts[k], reverse=True)
@@ -86,6 +104,14 @@ def dfs_report (node, depth):
         if not args.rank : depth += 1
         for child in sorted_children:
             dfs_report(child, depth)
+    if t_counts:# add only if the node has sequences assigned to it
+        extract_ids.extend(seq_ids[node])
+    # we want to extract up to a certain clade from a certain rank,
+    # if there is a min sequences to extract, and only if a ref file is provided
+    if (args.clades == node or rank_code(rank) == args.rank) and args.extractFile and len(extract_ids) >= args.min:
+        print ("Extracting",len(extract_ids),"sequences for",name_map[node], file=sys.stderr)
+        extract_seq_from_id(name_map[node], extract_ids, args.extractFile)
+        extract_ids = []
 
 def dfs_summation(node):
     children = child_lists[node]
@@ -94,11 +120,9 @@ def dfs_summation(node):
             dfs_summation(child)
             clade_counts[node] += clade_counts.get(child, 0)
 
-
 name_map, rank_map, child_lists = load_taxonomy(db_prefix)
 
 print("dmp files loaded", file=sys.stderr)
-
 
 seq_count = 0
 taxo_counts = defaultdict(int)
@@ -108,6 +132,7 @@ with open(args.infile, 'r', newline='') as krakenfile:
     for row in kfile:
         taxo_counts[int(row[2])] += 1
         seq_count += 1
+        seq_ids[int(row[2])].append(row[1])
 
 print(args.infile,"parsed", file=sys.stderr)
 
@@ -127,4 +152,3 @@ print ("{:6.2f}\t{}\t{}\t{}\t{}\t{}{}".format(
     clade_counts.get(0), taxo_counts[0], 
     "U", 0, "", "unclassified"))
 dfs_report(args.clades, 0)
-
