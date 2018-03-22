@@ -4,6 +4,7 @@ from Bio import SeqIO
 from collections import defaultdict
 import argparse
 import os
+import json
 #grep 'scientific name' ~/MetaGen/references/names.dmp |cut -d'|' -f 1,2>names_trimmed.dmp
 #cut -d '|' -f 1,2,3 ~/MetaGen/references/naodes.dmp >nodes_trimmed.dmp
 
@@ -53,6 +54,13 @@ def load_taxonomy(db_prefix):
                 parent_id = 0
             child_lists[parent_id].append(node_id)
             rank_map[node_id] = rank
+            
+    with open(db_prefix+"/taxonomy/name_map.json",'w') as name_map_file, open(db_prefix+"/taxonomy/rank_map.json",'w') \
+                as rank_map_file, open(db_prefix+"/taxonomy/child_list.json",'w') as child_lists_file:
+        json.dump(name_map,name_map_file)
+        json.dump(rank_map, rank_map_file)
+        json.dump(child_lists,child_lists_file)
+        
     return (name_map, rank_map, child_lists)
 
 def rank_code(rank):
