@@ -12,7 +12,7 @@ parser.add_argument('--db', required=True,
                     help='The kraken database to use')
 parser.add_argument('--zeros', action='store_true',
                     help='Show also 0')
-parser.add_argument('--clades', default=1, type=int,
+parser.add_argument('--clades', default='1',
                     help='Select only clade')
 parser.add_argument('--minp', default=0.0, type=float,
                     help='Filter on the minimum percent of sequences for this clade')
@@ -39,15 +39,15 @@ def load_taxonomy(db_prefix):
     with open(db_prefix+"/taxonomy/names_trimmed.dmp", 'r') as name_file:
         for line in name_file:
             node_id, name = line.strip().split('|')
-            node_id = int(node_id)
+            node_id = node_id.strip()
             name = name.strip()
             name_map[node_id] = name
             
     with open(db_prefix+"/taxonomy/nodes_trimmed.dmp", 'r') as nodes_file:
         for line in nodes_file:
             node_id, parent_id, rank = line.strip().split('|')
-            node_id = int(node_id)
-            parent_id = int(parent_id)
+            node_id = node_id.strip()
+            parent_id = parent_id.strip()
             rank = rank.strip()
             if node_id == 1:
                 parent_id = 0
@@ -110,7 +110,8 @@ def dfs_report (node, depth):
     # if there is a min sequences to extract, and only if a ref file is provided
     if (args.clades == node or rank_code(rank) == args.rank) and args.extractFile and len(extract_ids) >= args.min:
         print ("Extracting",len(extract_ids),"sequences for",name_map[node], file=sys.stderr)
-        extract_seq_from_id(name_map[node], extract_ids, args.extractFile)
+        # the names contains whitespaces
+        extract_seq_from_id(name_map[node].replace(' ','_'), extract_ids, args.extractFile)
         extract_ids = []
 
 def dfs_summation(node):
@@ -130,9 +131,9 @@ taxo_counts = defaultdict(int)
 with open(args.infile, 'r', newline='') as krakenfile:
     kfile = reader(krakenfile, delimiter='\t')
     for row in kfile:
-        taxo_counts[int(row[2])] += 1
+        taxo_counts[row[2]] += 1
         seq_count += 1
-        seq_ids[int(row[2])].append(row[1])
+        seq_ids[row[2]].append(row[1])
 
 print(args.infile,"parsed", file=sys.stderr)
 
