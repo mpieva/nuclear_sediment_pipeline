@@ -37,29 +37,41 @@ def load_taxonomy(db_prefix):
     name_map = {}
     rank_map = {}
     child_lists = defaultdict(list)
-    with open(db_prefix+"/taxonomy/names_trimmed.dmp", 'r') as name_file:
-        for line in name_file:
-            node_id, name = line.strip().split('|')
-            node_id = node_id.strip()
-            name = name.strip()
-            name_map[node_id] = name
-            
-    with open(db_prefix+"/taxonomy/nodes_trimmed.dmp", 'r') as nodes_file:
-        for line in nodes_file:
-            node_id, parent_id, rank = line.strip().split('|')
-            node_id = node_id.strip()
-            parent_id = parent_id.strip()
-            rank = rank.strip()
-            if node_id == 1:
-                parent_id = 0
-            child_lists[parent_id].append(node_id)
-            rank_map[node_id] = rank
-            
-    with open(db_prefix+"/taxonomy/name_map.json",'w') as name_map_file, open(db_prefix+"/taxonomy/rank_map.json",'w') \
-                as rank_map_file, open(db_prefix+"/taxonomy/child_list.json",'w') as child_lists_file:
-        json.dump(name_map,name_map_file)
-        json.dump(rank_map, rank_map_file)
-        json.dump(child_lists,child_lists_file)
+    #read the taxonomy .dmp to and create or dict
+    if not os.path.exists(db_prefix+"/taxonomy/name_map.json") or \
+        not os.path.exists(db_prefix+"/taxonomy/rank_map.json") or \
+        not os.path.exists(db_prefix+"/taxonomy/child_lists.json"):
+        print ("Map files don't exist, creating json...", file=sys.stderr)
+        with open(db_prefix+"/taxonomy/names_trimmed.dmp", 'r') as name_file:
+            for line in name_file:
+                node_id, name = line.strip().split('|')
+                node_id = node_id.strip()
+                name = name.strip()
+                name_map[node_id] = name
+        with open(db_prefix+"/taxonomy/nodes_trimmed.dmp", 'r') as nodes_file:
+            for line in nodes_file:
+                node_id, parent_id, rank = line.strip().split('|')
+                node_id = node_id.strip()
+                parent_id = parent_id.strip()
+                rank = rank.strip()
+                if node_id == '1':
+                    parent_id = '0'
+                child_lists[parent_id].append(node_id)
+                rank_map[node_id] = rank
+        #save our dicts as json
+        with open(db_prefix+"/taxonomy/name_map.json",'w') as name_map_file, \
+                open(db_prefix+"/taxonomy/rank_map.json",'w') as rank_map_file, \
+                open(db_prefix+"/taxonomy/child_lists.json",'w') as child_lists_file:
+            json.dump(name_map,name_map_file)
+            json.dump(rank_map, rank_map_file)
+            json.dump(child_lists,child_lists_file)
+    else: #load the json
+        with open(db_prefix+"/taxonomy/name_map.json",'r') as name_map_file, \
+                open(db_prefix+"/taxonomy/rank_map.json",'r') as rank_map_file, \
+                open(db_prefix+"/taxonomy/child_lists.json",'r') as child_lists_file:
+            name_map = json.load(name_map_file)
+            rank_map = json.load(rank_map_file)
+            child_lists = json.load(child_lists_file)
         
     return (name_map, rank_map, child_lists)
 
@@ -82,11 +94,10 @@ def extract_seq_from_id(fileout, id_list, seqfile):
                 break
             if rec.id in id_list:
                 num_seq_to_extract -= 1
-                #print(rec, file=sys.stderr)
                 SeqIO.write(rec,fout,'fasta')
 
 def dfs_report (node, depth):
-    global extract_ids
+    global extract_ids # we share this list through the recursive calls
     t_counts, c_counts, rank = taxo_counts[node], clade_counts[node], rank_map[node]
     if (not c_counts and not args.zeros):
         return
@@ -105,7 +116,7 @@ def dfs_report (node, depth):
             name_map[node]))
     # start saving the sequence mames for this clade
     if args.rank == rank_code(rank): extract_ids = []
-    children = child_lists[node]
+    children = child_lists.get(node,[])
     if len(children):
         sorted_children = sorted(children, key=lambda k: clade_counts[k], reverse=True)
         #format output only if not filtered by rank
@@ -123,7 +134,7 @@ def dfs_report (node, depth):
         extract_ids = []
 
 def dfs_summation(node):
-    children = child_lists[node]
+    children = child_lists.get(node,[])
     if len(children):
         for child in children:
             dfs_summation(child)
@@ -131,10 +142,10 @@ def dfs_summation(node):
 
 name_map, rank_map, child_lists = load_taxonomy(db_prefix)
 
-print("dmp files loaded", file=sys.stderr)
+print("Map files loaded", file=sys.stderr)
 
-seq_count = 0
-taxo_counts = defaultdict(int)
+seq_count = 0 # init the number of sequences
+taxo_counts = defaultdict(int) # every new entry will be initialized to 0
 
 with open(args.infile, 'r', newline='') as krakenfile:
     kfile = reader(krakenfile, delimiter='\t')
@@ -147,8 +158,6 @@ print(args.infile,"parsed", file=sys.stderr)
 
 classified_count = seq_count - taxo_counts[0]
 clade_counts = taxo_counts.copy()
-
-#clade_counts
 
 dfs_summation(args.clades)
 
