@@ -13,7 +13,7 @@ parser.add_argument('--db', required=True,
                     help='The kraken database to use')
 parser.add_argument('--zeros', action='store_true',
                     help='Show also 0')
-parser.add_argument('--clades', default='1',
+parser.add_argument('--clades', default=False,
                     help='Select only clade')
 parser.add_argument('--minp', default=0.0, type=float,
                     help='Filter on the minimum percent of sequences for this clade')
@@ -105,7 +105,7 @@ def dfs_report (node, depth):
     #filter on min seqences on clade
     #filter on min percent
     #filter on rank
-    if not args.rank or (args.rank == rank_code(rank)) and (c_counts >= args.min and c_counts_percent >= args.minp):
+    if (not args.rank or args.rank == rank_code(rank)) and (c_counts >= args.min and c_counts_percent >= args.minp):
         print ("{:6.2f}\t{}\t{}\t{}\t{}\t{}{}".format(
             c_counts_percent,
             c_counts,
@@ -123,15 +123,17 @@ def dfs_report (node, depth):
         if not args.rank : depth += 1
         for child in sorted_children:
             dfs_report(child, depth)
-    if t_counts:# add only if the node has sequences assigned to it
-        extract_ids.extend(seq_ids[node])
     # we want to extract up to a certain clade from a certain rank,
     # if there is a min sequences to extract, and only if a ref file is provided
-    if (args.clades == node or rank_code(rank) == args.rank) and args.extractFile and len(extract_ids) >= args.min:
-        print ("Extracting",len(extract_ids),"sequences for",name_map[node], file=sys.stderr)
-        # the names contains whitespaces
-        extract_seq_from_id(name_map[node].replace(' ','_'), extract_ids, args.extractFile)
-        extract_ids = []
+    if args.extractFile:
+        if t_counts:# add only if the node has sequences assigned to it
+            extract_ids.extend(seq_ids[node])
+        if (args.clades == node or rank_code(rank) == args.rank) and \
+            (c_counts_percent >= args.minp and len(extract_ids) >= args.min):
+            print ("Extracting",len(extract_ids),"sequences for",name_map[node], file=sys.stderr)
+            # the names contains whitespaces
+            extract_seq_from_id(name_map[node].replace(' ','_'), extract_ids, args.extractFile)
+            extract_ids = []
 
 def dfs_summation(node):
     children = child_lists.get(node,[])
@@ -159,14 +161,21 @@ print(args.infile,"parsed", file=sys.stderr)
 classified_count = seq_count - taxo_counts[0]
 clade_counts = taxo_counts.copy()
 
-dfs_summation(args.clades)
+if args.clades:
+    dfs_summation(args.clades)
+else:
+    dfs_summation('1')
 
 unclassified_percent = 100
 if seq_count:
     unclassified_percent = clade_counts.get(0) * 100 / seq_count
+if  not args.clades and not args.rank:
+    print ("{:6.2f}\t{}\t{}\t{}\t{}\t{}{}".format(
+        unclassified_percent,
+        clade_counts.get(0), taxo_counts[0], 
+        "U", 0, "", "unclassified"))
 
-print ("{:6.2f}\t{}\t{}\t{}\t{}\t{}{}".format(
-    unclassified_percent,
-    clade_counts.get(0), taxo_counts[0], 
-    "U", 0, "", "unclassified"))
-dfs_report(args.clades, 0)
+if args.clades:
+    dfs_report(args.clades, 0)
+else:
+    dfs_report('1', 0)
