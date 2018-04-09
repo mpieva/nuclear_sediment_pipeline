@@ -1,6 +1,7 @@
 import sys
 from csv import reader
 from Bio import SeqIO
+from pysam import AlignmentFile
 from collections import defaultdict
 import argparse
 import os
@@ -86,7 +87,7 @@ def rank_code(rank):
     if rank == "superkingdom": return "D"
     return "-"
 
-def extract_seq_from_id(fileout, id_list, seqfile):
+def extract_fasta_from_id(fileout, id_list, seqfile):
     num_seq_to_extract = len(id_list)
     with open(fileout+".fa", 'w') as fout:
         for rec in SeqIO.parse(seqfile, 'fasta'):
@@ -95,6 +96,21 @@ def extract_seq_from_id(fileout, id_list, seqfile):
             if rec.id in id_list:
                 num_seq_to_extract -= 1
                 SeqIO.write(rec,fout,'fasta')
+
+def extract_bam_from_id(fileout, id_list, seqfile):
+    num_seq_to_extract = len(id_list)
+    with AlignmentFile(seqfile, 'rb', check_sq=False) as bam_in, \
+        AlignmentFile(fileout+".bam", 'wb', template=bam_in) as fout:
+        for read in bam_in.fetch(until_eof=True):
+            if not num_seq_to_extract:
+                break
+            if read.query_name in id_list:
+                num_seq_to_extract -= 1
+                fout.write(read)
+
+def extract_seq_from_id(fileout, id_list, seqfile, data_type='bam'):
+    if data_type == 'fasta': extract_fasta_from_id(fileout, id_list, seqfile)
+    elif data_type == 'bam': extract_bam_from_id(fileout, id_list, seqfile)
 
 def dfs_report (node, depth):
     global extract_ids # we share this list through the recursive calls
@@ -172,7 +188,7 @@ if seq_count:
 if  not args.clades and not args.rank:
     print ("{:6.2f}\t{}\t{}\t{}\t{}\t{}{}".format(
         unclassified_percent,
-        clade_counts.get(0), taxo_counts[0], 
+        clade_counts.get(0), taxo_counts[0],
         "U", 0, "", "unclassified"))
 
 if args.clades:
