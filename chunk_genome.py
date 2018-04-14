@@ -45,6 +45,7 @@ def insert_mutations(seq):
 def iterate_through_record(record):
     i=0
     tmp_chunks = []
+    print("Pool",len(record))
     while i < len(record):
         # discard sequences with N only
         if record[i] == 'N':
@@ -74,11 +75,13 @@ def main():
         if check_kraken_id(record, args.specie): #start thread
             print("Found sequence for specie", args.specie, record.id, file=sys.stderr) 
             with Pool(args.nthreads) as p:
-                #TODO, check if specifying the chunk size can be directly in map...
+                #TODO, check if specifying the chunk size can be directly in map...nope, size is always 1
                 thread_chunk_size = int(len(record) / args.nthreads)+1
                 tmp_chunks = p.map(iterate_through_record, [record[i*thread_chunk_size:(i+1)*thread_chunk_size] for i in range(args.nthreads)])
+                #TODO sample x chunks directly (random [start positions and length times] * num_seq)
             for thread_chunks in tmp_chunks:
                 all_chunks += thread_chunks
+            break
         # assume sequence are consecutive for each species 
         elif len(all_chunks):
             break
