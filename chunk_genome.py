@@ -1,4 +1,4 @@
-from Bio import SeqIO
+from Bio import SeqIO, SeqRecord
 import random
 import sys
 import numpy as np
@@ -6,7 +6,7 @@ from multiprocessing import Pool
 import argparse
 
 parser = argparse.ArgumentParser(description='Split a genome into chuncks, add mutations')
-parser.add_argument('--mut_rate', default=0.001, type=float,
+parser.add_argument('--mut_rate', default=1/10000, type=float,
                     help='Mutation rate')
 parser.add_argument('--num_seq', default=0, type=int,
                     help='Number of sequences to output')
@@ -45,7 +45,6 @@ def insert_mutations(seq):
 def iterate_through_record(record):
     i=0
     tmp_chunks = []
-    print("Pool",len(record))
     while i < len(record):
         # discard sequences with N only
         if record[i] == 'N':
@@ -53,19 +52,18 @@ def iterate_through_record(record):
             continue
         #default size is 35<>100
         chunk_size = get_random_length()
-        #print ("Chunk",i,i+chunk_size, record[i:i+chunk_size].seq)
-        #get a subseq of the record
-        #chunk_record = record[i:i+chunk_size]                
-        #all_chunks.append([chunk_record, i])
         
         #reduce the size of the array for memory efficiency
         tmp_chunks.append([record[i:i+chunk_size], i])
         i += chunk_size
+    
     # control if our chunk contains enough reads
-    if args.num_seq and len(tmp_chunks) > int(args.num_seq/args.nthreads):
-        return random.sample(tmp_chunks, int(args.num_seq/args.nthreads))
-    else:
-        return tmp_chunks
+    try:
+        if args.num_seq:
+            return random.sample(tmp_chunks, int(args.num_seq/args.nthreads)+1)
+    except ValueError:
+        pass
+    return tmp_chunks
 
 def main():
     all_chunks = []
@@ -73,7 +71,7 @@ def main():
     print("Searching for specie", args.specie, file=sys.stderr) 
     for record in SeqIO.parse(args.file_in, "fasta"):
         if check_kraken_id(record, args.specie): #start thread
-            print("Found sequence for specie", args.specie, record.id, file=sys.stderr) 
+            print("Found sequence for taxa", args.specie, record.id, file=sys.stderr) 
             with Pool(args.nthreads) as p:
                 #TODO, check if specifying the chunk size can be directly in map...nope, size is always 1
                 thread_chunk_size = int(len(record) / args.nthreads)+1
@@ -81,22 +79,20 @@ def main():
                 #TODO sample x chunks directly (random [start positions and length times] * num_seq)
             for thread_chunks in tmp_chunks:
                 all_chunks += thread_chunks
-            break
         # assume sequence are consecutive for each species 
         elif len(all_chunks):
             break
     print("All sequences parsed, merging...", file=sys.stderr)
-    if args.num_seq:
-        all_chunks = random.sample(all_chunks, args.num_seq)
-     
+    try:
+        if args.num_seq:
+            all_chunks = random.sample(all_chunks, args.num_seq)
+    except ValueError:
+        print("Returning only {} sequences".format(len(all_chunks)),file=sys.stderr)
     with open(args.outfile, 'w') as file_out:
-        for chunk_record, pos in all_chunks:
-            # add mutations to sequence only now, as we work on a subset (runs faster?)
-            if args.mut_rate:
-                chunk_record.seq = insert_mutations(chunk_record.seq)
-            chunk_record.id = "{}|{}_{}".format(chunk_record.id, pos, len(chunk_record))
-            SeqIO.write(chunk_record, file_out, "fasta")
-            break
-
+        if args.mut_rate:
+            record_it = (SeqRecord.SeqRecord(insert_mutations(record.seq), id="{}|{}_{}".format(record.id, pos, len(record)), description = record.description) for record, pos in all_chunks)
+        else:
+            record_it = (SeqRecord.SeqRecord(record.seq, id="{}|{}_{}".format(record.id, pos, len(record)), description = record.description) for record, pos in all_chunks)
+        SeqIO.write(record_it, file_out, "fasta")
 if __name__ == "__main__":
     main()
