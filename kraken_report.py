@@ -9,7 +9,7 @@ import json
 #grep 'scientific name' ~/MetaGen/references/names.dmp |cut -d'|' -f 1,2>names_trimmed.dmp
 #cut -d '|' -f 1,2,3 ~/MetaGen/references/naodes.dmp >nodes_trimmed.dmp
 
-parser = argparse.ArgumentParser(description='Create a report from a kraken output.')
+parser = argparse.ArgumentParser(description='Create a report from a kraken output. Optionally extract reads')
 parser.add_argument('--db', required=True,
                     help='The kraken database to use')
 parser.add_argument('--zeros', action='store_true',
@@ -21,7 +21,7 @@ parser.add_argument('--minp', default=0.0, type=float,
 parser.add_argument('--min', default=0, type=int,
                     help='Filter on the minimum sequences for this clade')
 parser.add_argument('--rank',  help='Only return clades for specified rank')
-parser.add_argument('--extractFile',  help='Fasta file where to extract seqence')
+parser.add_argument('--extractFile',  help='File where to extract sequence from')
 parser.add_argument('infile', metavar="kraken.output")
 
 args = parser.parse_args()
