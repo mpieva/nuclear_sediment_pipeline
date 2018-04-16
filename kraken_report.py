@@ -148,7 +148,8 @@ def dfs_report (node, depth):
             (c_counts_percent >= args.minp and len(extract_ids) >= args.min):
             print ("Extracting",len(extract_ids),"sequences for",name_map[node], file=sys.stderr)
             # the names contains whitespaces
-            extract_seq_from_id(name_map[node].replace(' ','_'), extract_ids, args.extractFile)
+            extract_seq_from_id(args.infile[:-len("fa.kraken")]+name_map[node].replace(' ','_'), \
+                                extract_ids, args.extractFile)
             extract_ids = []
 
 def dfs_summation(node):
