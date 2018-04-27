@@ -15,7 +15,7 @@ parser.add_argument('--db', required=True,
 parser.add_argument('--zeros', action='store_true',
                     help='Show also 0')
 parser.add_argument('--clades', default=False,
-                    help='Select only clade')
+                    help='Select only specified clades (comma separated)')
 parser.add_argument('--minp', default=0.0, type=float,
                     help='Filter on the minimum percent of sequences for this clade')
 parser.add_argument('--min', default=0, type=int,
@@ -25,6 +25,9 @@ parser.add_argument('--extractFile',  help='File where to extract sequence from'
 parser.add_argument('infile', metavar="kraken.output")
 
 args = parser.parse_args()
+
+if args.clades: # handle providing multiple clades, comma separated
+    args.clades = args.clades.split(",")
 
 db_prefix = os.path.abspath(args.db)
 if args.rank and len(args.rank) > 1:
@@ -144,7 +147,7 @@ def dfs_report (node, depth):
     if args.extractFile:
         if t_counts:# add only if the node has sequences assigned to it
             extract_ids.extend(seq_ids[node])
-        if (args.clades == node or rank_code(rank) == args.rank) and \
+        if (node in args.clades or rank_code(rank) == args.rank) and \
             (c_counts_percent >= args.minp and len(extract_ids) >= args.min):
             print ("Extracting",len(extract_ids),"sequences for",name_map[node], file=sys.stderr)
             # the names contains whitespaces
@@ -179,7 +182,8 @@ classified_count = seq_count - taxo_counts[0]
 clade_counts = taxo_counts.copy()
 
 if args.clades:
-    dfs_summation(args.clades)
+    for clade in args.clades:
+        dfs_summation(clade)
 else:
     dfs_summation('1')
 
@@ -193,6 +197,7 @@ if  not args.clades and not args.rank:
         "U", 0, "", "unclassified"))
 
 if args.clades:
-    dfs_report(args.clades, 0)
+    for clade in args.clades:
+        dfs_report(clade, 0)
 else:
     dfs_report('1', 0)
