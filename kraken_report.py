@@ -108,7 +108,11 @@ def extract_bam_from_id(fileout, id_list, seqfile):
             if not num_seq_to_extract:
                 break
             if read.query_name in id_list:
-                num_seq_to_extract -= 1
+                if not read.is_paired:
+                    num_seq_to_extract -= 1
+                elif read.is_read2: # decrease counter only if we see the second read of our pair
+                    num_seq_to_extract -= 1
+                    
                 fout.write(read)
 
 def extract_seq_from_id(fileout, id_list, seqfile, data_type='bam'):
@@ -150,8 +154,12 @@ def dfs_report (node, depth):
         if (node in args.clades or rank_code(rank) == args.rank) and \
             (c_counts_percent >= args.minp and len(extract_ids) >= args.min):
             print ("Extracting",len(extract_ids),"sequences for",name_map[node], file=sys.stderr)
+            if "fa.kraken" in args.infile:
+                suffix_length = len("fa.kraken")
+            elif "fasta.kraken" in args.infile:
+                suffix_length = len("fasta.kraken")
             # the names contains whitespaces
-            extract_seq_from_id(args.infile[:-len("fa.kraken")]+name_map[node].replace(' ','_'), \
+            extract_seq_from_id(args.infile[:-suffix_length]+name_map[node].replace(' ','_'), \
                                 extract_ids, args.extractFile)
             extract_ids = []
 
