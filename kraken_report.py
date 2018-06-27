@@ -116,6 +116,8 @@ def extract_bam_from_id(fileout, id_list, seqfile):
                 fout.write(read)
 
 def extract_seq_from_id(fileout, id_list, seqfile, data_type='bam'):
+    if seqfile.endswith("fasta") or seqfile.endswith("fa") or seqfile.endswith("fas"):
+        data_type = 'fasta'
     if data_type == 'fasta': extract_fasta_from_id(fileout, id_list, seqfile)
     elif data_type == 'bam': extract_bam_from_id(fileout, id_list, seqfile)
 
@@ -158,6 +160,8 @@ def dfs_report (node, depth):
                 suffix_length = len("fa.kraken")
             elif "fasta.kraken" in args.infile:
                 suffix_length = len("fasta.kraken")
+            else:
+                suffix_length = len("kraken")
             # the names contains whitespaces
             extract_seq_from_id(args.infile[:-suffix_length]+name_map[node].replace(' ','_'), \
                                 extract_ids, args.extractFile)
