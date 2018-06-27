@@ -94,26 +94,27 @@ def extract_fasta_from_id(fileout, id_list, seqfile):
     num_seq_to_extract = len(id_list)
     with open(fileout+".fa", 'w') as fout:
         for rec in SeqIO.parse(seqfile, 'fasta'):
-            if not num_seq_to_extract:
-                break
-            if rec.id in id_list:
+            if rec.id in id_list: # as set is more efficient than a list
+                #see https://wiki.python.org/moin/TimeComplexity
                 num_seq_to_extract -= 1
-                SeqIO.write(rec,fout,'fasta')
+                SeqIO.write(rec, fout,  'fasta')
+                if num_seq_to_extract == 0:
+                    break
 
 def extract_bam_from_id(fileout, id_list, seqfile):
     num_seq_to_extract = len(id_list)
     with AlignmentFile(seqfile, 'rb', check_sq=False) as bam_in, \
         AlignmentFile(fileout+".bam", 'wb', template=bam_in) as fout:
         for read in bam_in.fetch(until_eof=True):
-            if not num_seq_to_extract:
-                break
-            if read.query_name in id_list:
+            if read.query_name in id_list: # as set is more efficient than a list
+                #see https://wiki.python.org/moin/TimeComplexity
                 if not read.is_paired:
                     num_seq_to_extract -= 1
                 elif read.is_read2: # decrease counter only if we see the second read of our pair
                     num_seq_to_extract -= 1
-                    
                 fout.write(read)
+                if not num_seq_to_extract:
+                    break
 
 def extract_seq_from_id(fileout, id_list, seqfile, data_type='bam'):
     if seqfile.endswith("fasta") or seqfile.endswith("fa") or seqfile.endswith("fas"):
@@ -140,7 +141,7 @@ def dfs_report (node, depth):
             "  " * depth,
             name_map[node]))
     # start saving the sequence mames for this clade
-    if args.rank == rank_code(rank): extract_ids = []
+    if args.rank == rank_code(rank): extract_ids = set()
     children = child_lists.get(node,[])
     if len(children):
         sorted_children = sorted(children, key=lambda k: clade_counts[k], reverse=True)
@@ -152,7 +153,8 @@ def dfs_report (node, depth):
     # if there is a min sequences to extract, and only if a ref file is provided
     if args.extractFile:
         if t_counts:# add only if the node has sequences assigned to it
-            extract_ids.extend(seq_ids[node])
+            # a set is more efficient than a list: see https://wiki.python.org/moin/TimeComplexity
+            extract_ids = extract_ids.union(seq_ids[node])
         if (node in args.clades or rank_code(rank) == args.rank) and \
             (c_counts_percent >= args.minp and len(extract_ids) >= args.min):
             print ("Extracting",len(extract_ids),"sequences for",name_map[node], file=sys.stderr)
@@ -165,7 +167,7 @@ def dfs_report (node, depth):
             # the names contains whitespaces
             extract_seq_from_id(args.infile[:-suffix_length]+name_map[node].replace(' ','_'), \
                                 extract_ids, args.extractFile)
-            extract_ids = []
+            extract_ids = set()
 
 def dfs_summation(node):
     children = child_lists.get(node,[])
