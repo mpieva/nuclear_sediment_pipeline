@@ -34,7 +34,7 @@ if args.rank and len(args.rank) > 1:
     args.rank = rank_code(rank)
 
 seq_ids = defaultdict(list)
-extract_ids = []
+extract_ids = set()
 
 # remember to use filtered nodes.dmp and names.dmp
 def load_taxonomy(db_prefix):
