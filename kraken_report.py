@@ -1,6 +1,8 @@
 import sys
 from csv import reader
 from Bio import SeqIO
+from Bio.SeqRecord import SeqRecord
+from Bio.Seq import Seq
 from pysam import AlignmentFile
 from collections import defaultdict
 import argparse
