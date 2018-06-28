@@ -3,7 +3,7 @@ from csv import reader
 from Bio import SeqIO
 from Bio.SeqRecord import SeqRecord
 from Bio.Seq import Seq
-from pysam import AlignmentFile
+from pysam import AlignmentFile, FastaFile
 from collections import defaultdict
 import argparse
 import os
@@ -123,7 +123,10 @@ def extract_bam_from_id(fileout, id_list, seqfile):
 def extract_seq_from_id(fileout, id_list, seqfile, data_type='bam'):
     if seqfile.endswith("fasta") or seqfile.endswith("fa") or seqfile.endswith("fas"):
         data_type = 'fasta'
+    elif seqfile.endswith("gz"): # assume indexed fasta
+        data_type = 'gz'
     if data_type == 'fasta': extract_fasta_from_id(fileout, id_list, seqfile)
+    elif data_type == 'gz': extract_faix_from_id(fileout, id_list, seqfile)
     elif data_type == 'bam': extract_bam_from_id(fileout, id_list, seqfile)
 
 def dfs_report (node, depth):
