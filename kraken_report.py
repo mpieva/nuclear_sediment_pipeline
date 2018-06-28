@@ -106,7 +106,6 @@ def extract_fasta_from_id(fileout, id_list, seqfile):
             print ( "Warning, EOF reached but", num_seq_to_extract, "sequences remained", file=sys.stderr)
 
 def extract_faidx_from_id(fileout, id_list, seqfile):
-    num_seq_
     with open(fileout+".fa", 'w') as fout, FastaFile(seqfile) as faidx:
             for rec_id in id_list: # as set is more efficient than a list
                 #see https://wiki.python.org/moin/TimeComplexity
