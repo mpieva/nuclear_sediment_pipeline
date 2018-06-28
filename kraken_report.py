@@ -100,6 +100,8 @@ def extract_fasta_from_id(fileout, id_list, seqfile):
                 SeqIO.write(rec, fout,  'fasta')
                 if num_seq_to_extract == 0:
                     break
+        if num_seq_to_extract > 0:
+            print ( "Warning, EOF reached but", num_seq_to_extract, "sequences remained", file=sys.stderr)
 
 def extract_bam_from_id(fileout, id_list, seqfile):
     num_seq_to_extract = len(id_list)
