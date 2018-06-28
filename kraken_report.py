@@ -106,10 +106,11 @@ def extract_fasta_from_id(fileout, id_list, seqfile):
             print ( "Warning, EOF reached but", num_seq_to_extract, "sequences remained", file=sys.stderr)
 
 def extract_faidx_from_id(fileout, id_list, seqfile):
+    num_seq_
     with open(fileout+".fa", 'w') as fout, FastaFile(seqfile, 'r') as faidx:
             for rec_id in id_list: # as set is more efficient than a list
                 #see https://wiki.python.org/moin/TimeComplexity
-                seq = faidx.fetch(rec)                
+                seq = faidx.fetch(rec)
                 SeqIO.write(SeqRecord(Seq(seq), id=rec_id), fout,  'fasta')
 
 def extract_bam_from_id(fileout, id_list, seqfile):
@@ -132,8 +133,8 @@ def extract_seq_from_id(fileout, id_list, seqfile, data_type='bam'):
         data_type = 'fasta'
     elif seqfile.endswith("gz"): # assume indexed fasta
         data_type = 'gz'
-    if data_type == 'fasta': extract_fasta_from_id(fileout, id_list, seqfile)
-    elif data_type == 'gz': extract_faix_from_id(fileout, id_list, seqfile)
+    #if data_type == 'fasta': extract_fasta_from_id(fileout, id_list, seqfile)
+    if data_type == 'fasta': extract_faidx_from_id(fileout, id_list, seqfile)
     elif data_type == 'bam': extract_bam_from_id(fileout, id_list, seqfile)
 
 def dfs_report (node, depth):
