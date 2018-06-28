@@ -105,6 +105,17 @@ def extract_fasta_from_id(fileout, id_list, seqfile):
         if num_seq_to_extract > 0:
             print ( "Warning, EOF reached but", num_seq_to_extract, "sequences remained", file=sys.stderr)
 
+def extract_faidx_from_id(fileout, id_list, seqfile):
+    num_seq_to_extract = len(id_list)
+    with open(fileout+".fa", 'w') as fout, FastaFile(seqfile, 'r') as faidx:
+            for rec in id_list: # as set is more efficient than a list
+                seq = faidx.fetch(rec)
+                #see https://wiki.python.org/moin/TimeComplexity
+                num_seq_to_extract -= 1
+                SeqIO.write(rec, fout,  'fasta')
+                if num_seq_to_extract == 0:
+                    break
+
 def extract_bam_from_id(fileout, id_list, seqfile):
     num_seq_to_extract = len(id_list)
     with AlignmentFile(seqfile, 'rb', check_sq=False) as bam_in, \
