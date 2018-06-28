@@ -109,7 +109,7 @@ def extract_faidx_from_id(fileout, id_list, seqfile):
     with open(fileout+".fa", 'w') as fout, FastaFile(seqfile) as faidx:
             for rec_id in id_list: # as set is more efficient than a list
                 #see https://wiki.python.org/moin/TimeComplexity
-                seq = faidx.fetch(rec)
+                seq = faidx.fetch(rec_id)
                 SeqIO.write(SeqRecord(Seq(seq), id=rec_id), fout,  'fasta')
 
 def extract_bam_from_id(fileout, id_list, seqfile):
