@@ -1,4 +1,5 @@
 import sys
+import gzip
 from csv import reader
 from Bio import SeqIO
 from pysam import AlignmentFile
@@ -6,6 +7,7 @@ from collections import defaultdict
 import argparse
 import os
 import json
+import contextlib
 #grep 'scientific name' ~/MetaGen/references/names.dmp |cut -d'|' -f 1,2>names_trimmed.dmp
 #cut -d '|' -f 1,2,3 ~/MetaGen/references/naodes.dmp >nodes_trimmed.dmp
 
@@ -22,6 +24,7 @@ parser.add_argument('--min', default=0, type=int,
                     help='Filter on the minimum sequences for this clade')
 parser.add_argument('--rank',  help='Only return clades for specified rank')
 parser.add_argument('--extractFile',  help='File where to extract sequence from')
+parser.add_argument('--min_length', default=0, type=int, help='Minimum length filter')
 parser.add_argument('infile', metavar="kraken.output")
 
 args = parser.parse_args()
@@ -90,18 +93,25 @@ def rank_code(rank):
     if rank == "superkingdom": return "D"
     return "-"
 
+@contextlib.contextmanager
+def ret_file(f):
+    yield f
+    
 def extract_fasta_from_id(fileout, id_list, seqfile):
     num_seq_to_extract = len(id_list)
-    with open(fileout+".fa", 'w') as fout:
+    #with open(fileout+".fa", 'w') as fout:
+    with open(fileout+".fa", 'w') as fout, \
+    gzip.open(seqfile, "rt") if seqfile.endswith("gz") else ret_file(seqfile) as seqfile:
         for rec in SeqIO.parse(seqfile, 'fasta'):
             if rec.id in id_list: # as set is more efficient than a list
                 #see https://wiki.python.org/moin/TimeComplexity
                 num_seq_to_extract -= 1
-                SeqIO.write(rec, fout,  'fasta')
+                if len(rec) >= args.min_length:
+                    SeqIO.write(rec, fout,  'fasta')
                 if num_seq_to_extract == 0:
                     break
         if num_seq_to_extract > 0:
-            print ( "Warning, EOF reached but", num_seq_to_extract, "sequences remained", file=sys.stderr)
+            print ( "Warning, EOF reached but", num_seq_to_extract, "sequences remained, is extractFile the original source?", file=sys.stderr)
 
 def extract_bam_from_id(fileout, id_list, seqfile):
     num_seq_to_extract = len(id_list)
@@ -114,12 +124,13 @@ def extract_bam_from_id(fileout, id_list, seqfile):
                     num_seq_to_extract -= 1
                 elif read.is_read2: # decrease counter only if we see the second read of our pair
                     num_seq_to_extract -= 1
-                fout.write(read)
+                if read.infer_read_length() >= args.min_length:
+                    fout.write(read)
                 if not num_seq_to_extract:
                     break
 
 def extract_seq_from_id(fileout, id_list, seqfile, data_type='bam'):
-    if seqfile.endswith("fasta") or seqfile.endswith("fa") or seqfile.endswith("fas"):
+    if seqfile.endswith("fasta") or seqfile.endswith("fa") or seqfile.endswith("fas") or seqfile.endswith("gz"):
         data_type = 'fasta'
     if data_type == 'fasta': extract_fasta_from_id(fileout, id_list, seqfile)
     elif data_type == 'bam': extract_bam_from_id(fileout, id_list, seqfile)
@@ -164,10 +175,12 @@ def dfs_report (node, depth):
                 suffix_length = len("fa.kraken")
             elif "fasta.kraken" in args.infile:
                 suffix_length = len("fasta.kraken")
+            elif "bam.kraken" in args.infile:
+                suffix_length = len("bam.kraken")
             else:
                 suffix_length = len("kraken")
             # the names contains whitespaces
-            extract_seq_from_id(args.infile[:-suffix_length]+name_map[node].replace(' ','_'), \
+            extract_seq_from_id(os.path.basename(args.infile)[:-suffix_length]+name_map[node].replace(' ','_'), \
                                 extract_ids, args.extractFile)
             extract_ids = set()
 
