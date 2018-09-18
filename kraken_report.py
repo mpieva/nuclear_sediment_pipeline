@@ -23,6 +23,7 @@ parser.add_argument('--minp', default=0.0, type=float,
 parser.add_argument('--min', default=0, type=int,
                     help='Filter on the minimum sequences for this clade')
 parser.add_argument('--rank',  help='Only return clades for specified rank')
+parser.add_argument('--translate',  help='Output for "translate" (read -> lineage)')
 parser.add_argument('--extractFile',  help='File where to extract sequence from')
 parser.add_argument('--min_length', default=0, type=int, help='Minimum length filter')
 parser.add_argument('infile', metavar="kraken.output")
@@ -43,11 +44,13 @@ extract_ids = set()
 def load_taxonomy(db_prefix):
     name_map = {}
     rank_map = {}
+    parent_map = {}
     child_lists = defaultdict(list)
     #read the taxonomy .dmp to and create or dict
     if not os.path.exists(db_prefix+"/taxonomy/name_map.json") or \
         not os.path.exists(db_prefix+"/taxonomy/rank_map.json") or \
-        not os.path.exists(db_prefix+"/taxonomy/child_lists.json"):
+        not os.path.exists(db_prefix+"/taxonomy/child_lists.json") or \
+        not os.path.exists(db_prefix+"/taxonomy/parent_map.json"):
         print ("Map files don't exist, creating json...", file=sys.stderr)
         with open(db_prefix+"/taxonomy/names_trimmed.dmp", 'r') as name_file:
             for line in name_file:
@@ -65,13 +68,16 @@ def load_taxonomy(db_prefix):
                     parent_id = '0'
                 child_lists[parent_id].append(node_id)
                 rank_map[node_id] = rank
+                parent_map[node_id] = parent_id
         #save our dicts as json
         with open(db_prefix+"/taxonomy/name_map.json",'w') as name_map_file, \
                 open(db_prefix+"/taxonomy/rank_map.json",'w') as rank_map_file, \
-                open(db_prefix+"/taxonomy/child_lists.json",'w') as child_lists_file:
+                open(db_prefix+"/taxonomy/child_lists.json",'w') as child_lists_file, \
+                open(db_prefix+"/taxonomy/parent_map.json",'w') as parent_map_file:
             json.dump(name_map,name_map_file)
             json.dump(rank_map, rank_map_file)
             json.dump(child_lists,child_lists_file)
+            json.dump(parent_map, parent_map_file)
     else: #load the json
         with open(db_prefix+"/taxonomy/name_map.json",'r') as name_map_file, \
                 open(db_prefix+"/taxonomy/rank_map.json",'r') as rank_map_file, \
@@ -192,6 +198,10 @@ def dfs_summation(node):
             clade_counts[node] += clade_counts.get(child, 0)
 
 name_map, rank_map, child_lists = load_taxonomy(db_prefix)
+parent_map = {}
+if args.translate:
+    with open(db_prefix+"/taxonomy/parent_map.json",'r') as parent_map_file:
+            parent_map = json.load(parent_map_file)
 
 print("Map files loaded", file=sys.stderr)
 
@@ -209,6 +219,8 @@ print(args.infile,"parsed", file=sys.stderr)
 
 classified_count = seq_count - taxo_counts[0]
 clade_counts = taxo_counts.copy()
+known_taxonomy_strings = {}
+
 
 if args.clades:
     for clade in args.clades:
