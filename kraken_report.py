@@ -30,7 +30,7 @@ parser.add_argument('infile', metavar="kraken.output")
 args = parser.parse_args()
 
 if args.clades: # handle providing multiple clades, comma separated
-    args.clades = args.clades.split(",")
+    args.clades = set(args.clades.split(","))
 
 db_prefix = os.path.abspath(args.db)
 if args.rank and len(args.rank) > 1:
@@ -210,8 +210,28 @@ print(args.infile,"parsed", file=sys.stderr)
 classified_count = seq_count - taxo_counts[0]
 clade_counts = taxo_counts.copy()
 
+#this function will discard child clades in order to have a proper summation
+def dfs_related(node, node_list):
+    res = []
+    children = child_lists.get(node,[])
+    if len(children):
+        #iterate through all children
+        for child in children:
+            if child in node_list: res+=[child]
+            # recursively look for children
+            res += dfs_related(child, node_list)
+    return res
+
 if args.clades:
-    for clade in args.clades:
+    #do the summation only once for each clade,
+    # that means, if we specify clades related to each other:
+    # e.g. 9606 9605, only the higher clade will be used
+    # as the descendant one will be recursively computed
+    clades=set()
+    for node in args.clades:
+        clades = clades.union(dfs_related(node, args.clades))
+    clades = args.clades.difference(clades)
+    for clade in clades:
         dfs_summation(clade)
 else:
     dfs_summation('1')
