@@ -16,7 +16,7 @@ parser.add_argument('--db', required=True,
                     help='The kraken database to use')
 parser.add_argument('--zeros', action='store_true',
                     help='Show also 0')
-parser.add_argument('--clades', default=False,
+parser.add_argument('--clades', default=[],
                     help='Select only specified clades (comma separated)')
 parser.add_argument('--minp', default=0.0, type=float,
                     help='Filter on the minimum percent of sequences for this clade')
@@ -135,7 +135,7 @@ def extract_seq_from_id(fileout, id_list, seqfile, data_type='bam'):
     if data_type == 'fasta': extract_fasta_from_id(fileout, id_list, seqfile)
     elif data_type == 'bam': extract_bam_from_id(fileout, id_list, seqfile)
 
-def dfs_report (node, depth):
+def dfs_report (node, depth, related=[]):
     global extract_ids # we share this list through the recursive calls
     t_counts, c_counts, rank = taxo_counts[node], clade_counts[node], rank_map[node]
     if (not c_counts and not args.zeros):
@@ -145,14 +145,15 @@ def dfs_report (node, depth):
     #filter on min percent
     #filter on rank
     if (not args.rank or args.rank == rank_code(rank)) and (c_counts >= args.min and c_counts_percent >= args.minp):
-        print ("{:6.2f}\t{}\t{}\t{}\t{}\t{}{}".format(
-            c_counts_percent,
-            c_counts,
-            t_counts,
-            rank_code(rank),
-            node,
-            "  " * depth,
-            name_map[node]))
+        if node not in related:
+            print ("{:6.2f}\t{}\t{}\t{}\t{}\t{}{}".format(
+                c_counts_percent,
+                c_counts,
+                t_counts,
+                rank_code(rank),
+                node,
+                "  " * depth,
+                name_map[node]))
     # start saving the sequence mames for this clade
     if args.rank == rank_code(rank): extract_ids = set()
     children = child_lists.get(node,[])
@@ -227,11 +228,11 @@ if args.clades:
     # that means, if we specify clades related to each other:
     # e.g. 9606 9605, only the higher clade will be used
     # as the descendant one will be recursively computed
-    clades=set()
+    related_clades=set()
     for node in args.clades:
-        clades = clades.union(dfs_related(node, args.clades))
-    clades = args.clades.difference(clades)
-    for clade in clades:
+        related_clades = related_clades.union(dfs_related(node, args.clades))
+    unrelated_clades = args.clades.difference(related_clades)
+    for clade in unrelated_clades:
         dfs_summation(clade)
 else:
     dfs_summation('1')
@@ -245,8 +246,11 @@ if  not args.clades and not args.rank:
         clade_counts.get(0), taxo_counts[0],
         "U", 0, "", "unclassified"))
 
-if args.clades:
+if args.clades:    
+    related_clades=set()
+    for node in args.clades:
+        related_clades = related_clades.union(dfs_related(node, args.clades))
     for clade in args.clades:
-        dfs_report(clade, 0)
+        dfs_report(clade, 0, related_clades)
 else:
     dfs_report('1', 0)
