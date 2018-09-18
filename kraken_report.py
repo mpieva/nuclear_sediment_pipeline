@@ -99,6 +99,17 @@ def rank_code(rank):
     if rank == "superkingdom": return "D"
     return "-"
 
+def get_taxonomy_str(taxid):
+    taxid_string = known_taxonomy_strings.get(taxid,False)
+    if not taxid_string:
+        name_map[taxid]
+        while ($taxid != '0'):
+            nodes += name_map[taxid]
+            taxid = parent_map[taxid]
+        taxid_string = ';'.join(nodes)
+        known_taxonomy_strings[taxid] = taxid_string
+    return taxid_string
+
 @contextlib.contextmanager
 def ret_file(f):
     yield f
