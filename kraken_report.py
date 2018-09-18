@@ -100,13 +100,13 @@ def rank_code(rank):
     return "-"
 
 def get_taxonomy_str(taxid):
-    taxid_string = known_taxonomy_strings.get(taxid,False)
+    taxid_string = known_taxonomy_strings.get(taxid, False)
     if not taxid_string:
-        name_map[taxid]
-        while ($taxid != '0'):
-            nodes += name_map[taxid]
+        nodes = []
+        while (taxid != '0'):
+            nodes += [name_map[taxid]]
             taxid = parent_map[taxid]
-        taxid_string = ';'.join(nodes)
+        taxid_string = ';'.join(nodes[::-1])
         known_taxonomy_strings[taxid] = taxid_string
     return taxid_string
 
@@ -210,28 +210,30 @@ def dfs_summation(node):
 
 name_map, rank_map, child_lists = load_taxonomy(db_prefix)
 parent_map = {}
+known_taxonomy_strings = {}
 if args.translate:
     with open(db_prefix+"/taxonomy/parent_map.json",'r') as parent_map_file:
-            parent_map = json.load(parent_map_file)
+        parent_map = json.load(parent_map_file)
 
 print("Map files loaded", file=sys.stderr)
 
 seq_count = 0 # init the number of sequences
 taxo_counts = defaultdict(int) # every new entry will be initialized to 0
 
-with open(args.infile, 'r', newline='') as krakenfile:
+with open(args.infile, 'r', newline='') as krakenfile, \
+    open(args.translate, "w") if args.translate else ret_file(None) as translate:
     kfile = reader(krakenfile, delimiter='\t')
     for row in kfile:
         taxo_counts[row[2]] += 1
         seq_count += 1
         seq_ids[row[2]].append(row[1])
+        if args.translate and row[0].startswith('C'):
+                print (row[1], get_taxonomy_str(row[2]), sep="\t", file=translate)
 
 print(args.infile,"parsed", file=sys.stderr)
 
 classified_count = seq_count - taxo_counts[0]
 clade_counts = taxo_counts.copy()
-known_taxonomy_strings = {}
-
 
 if args.clades:
     for clade in args.clades:
