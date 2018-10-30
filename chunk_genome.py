@@ -47,7 +47,7 @@ def get_sequence_with_substitution(sequence):
     # returns the base relative to our random number for position pos given
     # the real base is nc
 
-
+# specific code to work with mappability track...
 def get_map_pos(n_samples, map_file="/tmp/fred/map_track.bed.gz"):
     with pysam.TabixFile(map_file, parser=pysam.asBed()) as tbx:
         reads = random.sample([row for row in tbx.fetch() if (
