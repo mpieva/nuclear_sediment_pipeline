@@ -102,11 +102,11 @@ def mutate_unif(sequence, unif):
 # the idea is to generate a set of coordinates/size pairs and only take those substrings:
 # sample 0:length_genome (N = #chunks desired)
 # sample N sizes (N = chunks desired)
-def chunk_fast(record, n_samples, vcf_in=None, chrom=None, individual=0, deaminate=0, minlength=35, maxlength=100):
+def chunk_fast(record, n_samples, vcf_in=None, chrom=None, individual=0, unif=False, deaminate=0, minlength=35, maxlength=100):
     try:
         positions = random.sample(range(0, len(record)-minlength), n_samples)
     except:
-        print("sample to small", len(record) -
+        print("sample too small", len(record) -
               minlength, n_samples, file=sys.stderr)
         positions = range(0, len(record) - minlength)
     # length = random.choices(range(minlength, maxlength), k = n_samples) #only from python6
@@ -141,7 +141,7 @@ def chunk_fast(record, n_samples, vcf_in=None, chrom=None, individual=0, deamina
         if deaminate:
             sample.seq = simulate_deamination(
                 sample.seq.tomutable(), deaminate)
-        if args.unif:
+        if unif:
             sample.seq = mutate_unif(sample.seq.tomutable(), unif)
         all_samples += [(sample, pos)]
     return all_samples
@@ -253,7 +253,7 @@ def main():
                 else:
                     chrom = chrom.group()[len('chromosome '):-1]
                 all_chunks += chunk_fast(record, num_reads_to_sample[
-                                         num_record], vcf_in, chrom, deaminate=args.deaminate, minlength=args.minlen, maxlength=args.maxlen)
+                                         num_record], vcf_in, chrom, unif=args.unif, deaminate=args.deaminate, minlength=args.minlen, maxlength=args.maxlen)
             if num_record % 100 == 99:  # show progress
                 print(num_record + 1, "sequences parsed...",
                       end="\r", file=sys.stderr)
