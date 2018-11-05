@@ -48,6 +48,8 @@ def get_sequence_with_substitution(sequence):
     # the real base is nc
 
 # specific code to work with mappability track...
+
+
 def get_map_pos(n_samples, map_file="/tmp/fred/map_track.bed.gz"):
     with pysam.TabixFile(map_file, parser=pysam.asBed()) as tbx:
         reads = random.sample([row for row in tbx.fetch() if (
@@ -78,6 +80,23 @@ def simulate_deamination(sequence, nbases=3):
     while "C" in sequence[-nbases:]:  # 3' C to T
         sequence[-nbases + sequence[-nbases:].index("C")] = "T"
     return sequence.toseq()
+
+
+def mutate_unif(sequence, unif):
+    same_nuc = set("ACGT")
+    read_length = len(sequence)
+    # choices is an array of True/False
+    # we will mutate if or sample is < unif
+    choices = np.random.random(read_length) < unif
+    newSeq = [''] * read_length
+    for idx, nc in enumerate(sequence):
+        mutate = choices[idx]
+        if mutate:
+            # we call tuple in order to do random.choice (and remove the current nc from the possibilities)
+            newSeq[idx] = random.choice(tuple(same_nuc.difference(nc)))
+        else:
+            newSeq[idx] = nc
+    return Seq(''.join(newSeq))
 
 
 # the idea is to generate a set of coordinates/size pairs and only take those substrings:
@@ -120,6 +139,8 @@ def chunk_fast(record, n_samples, vcf_in=None, chrom=None, individual=0, deamina
         if deaminate:
             sample.seq = simulate_deamination(
                 sample.seq.tomutable(), deaminate)
+        if args.unif:
+            sample.seq = mutate_unif(sample.seq.tomutable(), unif)
         all_samples += [(sample, pos)]
     return all_samples
 
@@ -166,6 +187,8 @@ def main():
     # TODO, control for option dependency properly
     parser.add_argument('--deaminate', type=int,
                         help='How many bases should be deaminated of each end', default=0)
+    parser.add_argument('--unif', type=float,
+                        help='Add mutations uniformly distributed', default=0.0)
     parser.add_argument('--individual', type=int,
                         help='The individual used for variation in you VCF', default=0)
     # either provide a VCF OR a substitution matrix, you probably don't want
