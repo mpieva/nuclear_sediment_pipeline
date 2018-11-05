@@ -103,21 +103,25 @@ def mutate_unif(sequence, unif):
 # sample 0:length_genome (N = #chunks desired)
 # sample N sizes (N = chunks desired)
 def chunk_fast(record, n_samples, vcf_in=None, chrom=None, individual=0, deaminate=0):
+    minlength = args.minlen
+    maxlength = args.maxlen
     try:
-        positions = random.sample(range(0, len(record)-35), n_samples)
+        positions = random.sample(range(0, len(record)-minlength), n_samples)
     except:
-        print("sample to small", len(record) - 35, n_samples, file=sys.stderr)
-        positions = range(0, len(record) - 35)
-    # length = random.choices(range(35,100), k = n_samples) #only from python6
+        print("sample to small", len(record) -
+              minlength, n_samples, file=sys.stderr)
+        positions = range(0, len(record) - minlength)
+    # length = random.choices(range(minlength, maxlength), k = n_samples) #only from python6
     # onwards
-    length = [random.choice(range(35, 100)) for k in range(n_samples)]
+    length = [random.choice(range(minlength, maxlength))
+              for k in range(n_samples)]
     all_samples = []
     for pos, l in zip(positions, length):
         while 'N' in record[pos:pos + l]:
             # print ("Unknown base (N) in read at {} {},
             # resampling...".format(pos,l), file=sys.stderr) # debug purpose
-            pos = random.choice(range(0, len(record) - 35))
-            l = random.choice(range(35, 100))
+            pos = random.choice(range(0, len(record) - minlength))
+            l = random.choice(range(minlength, maxlength))
         # if not('N' in record[pos:pos+l]): # control for sequences without
         # N's, deprecated by the 'while' statement above
         sample = record[pos:pos + l]
@@ -184,6 +188,10 @@ def main():
     parser.add_argument('file_in', metavar="genome.fa.gz, bgzip'd and indexed")
     parser.add_argument('--chromosomes', type=int,
                         help='How many chromosomes are expected', default=0)
+    parser.add_argument('--minlen', type=int,
+                        help='Minimum read length (lengths are sampled uniformly)', default=35)
+    parser.add_argument('--maxlen', type=int,
+                        help='Maximum read length (lengths are sampled uniformly)', default=100)
     # TODO, control for option dependency properly
     parser.add_argument('--deaminate', type=int,
                         help='How many bases should be deaminated of each end', default=0)
