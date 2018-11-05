@@ -253,7 +253,7 @@ def main():
                 else:
                     chrom = chrom.group()[len('chromosome '):-1]
                 all_chunks += chunk_fast(record, num_reads_to_sample[
-                                         num_record], vcf_in, chrom, deaminate=args.deaminate, minlen=args.minlen, maxlen=args.maxlen)
+                                         num_record], vcf_in, chrom, deaminate=args.deaminate, minlength=args.minlen, maxlength=args.maxlen)
             if num_record % 100 == 99:  # show progress
                 print(num_record + 1, "sequences parsed...",
                       end="\r", file=sys.stderr)
