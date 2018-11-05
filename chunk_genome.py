@@ -106,9 +106,10 @@ def chunk_fast(record, n_samples, vcf_in=None, chrom=None, individual=0, unif=Fa
     try:
         positions = random.sample(range(0, len(record)-minlength), n_samples)
     except:
-        print("sample too small", len(record) -
-              minlength, n_samples, file=sys.stderr)
-        positions = range(0, len(record) - minlength)
+        print("sample too small {}bp, sampling {} reads with replacements".format(len(record) -
+                                                                                  minlength, n_samples), file=sys.stderr)
+        positions = [random.choice(range(0, len(record) - minlength))
+                     for _ in range(n_samples)]
     # length = random.choices(range(minlength, maxlength), k = n_samples) #only from python6
     # onwards
     length = [random.choice(range(minlength, maxlength))
