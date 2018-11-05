@@ -102,9 +102,7 @@ def mutate_unif(sequence, unif):
 # the idea is to generate a set of coordinates/size pairs and only take those substrings:
 # sample 0:length_genome (N = #chunks desired)
 # sample N sizes (N = chunks desired)
-def chunk_fast(record, n_samples, vcf_in=None, chrom=None, individual=0, deaminate=0):
-    minlength = args.minlen
-    maxlength = args.maxlen
+def chunk_fast(record, n_samples, vcf_in=None, chrom=None, individual=0, deaminate=0, minlength=35, maxlength=100):
     try:
         positions = random.sample(range(0, len(record)-minlength), n_samples)
     except:
@@ -255,7 +253,7 @@ def main():
                 else:
                     chrom = chrom.group()[len('chromosome '):-1]
                 all_chunks += chunk_fast(record, num_reads_to_sample[
-                                         num_record], vcf_in, chrom, deaminate=args.deaminate)
+                                         num_record], vcf_in, chrom, deaminate=args.deaminate, args.minlen, args.maxlen)
             if num_record % 100 == 99:  # show progress
                 print(num_record + 1, "sequences parsed...",
                       end="\r", file=sys.stderr)
