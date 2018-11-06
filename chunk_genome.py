@@ -102,7 +102,7 @@ def mutate_unif(sequence, unif):
 # the idea is to generate a set of coordinates/size pairs and only take those substrings:
 # sample 0:length_genome (N = #chunks desired)
 # sample N sizes (N = chunks desired)
-def chunk_fast(record, n_samples, vcf_in=None, chrom=None, individual=0, unif=False, deaminate=0, minlength=35, maxlength=100):
+def chunk_fast(record, n_samples, vcf_in=None, chrom=None, individual=0, unif=False, len_distrib=False, deaminate=0, minlength=35, maxlength=100):
     try:
         positions = random.sample(range(0, len(record)-minlength), n_samples)
     except:
@@ -110,17 +110,26 @@ def chunk_fast(record, n_samples, vcf_in=None, chrom=None, individual=0, unif=Fa
                                                                                   minlength, n_samples), file=sys.stderr)
         positions = [random.choice(range(0, len(record) - minlength))
                      for _ in range(n_samples)]
-    # length = random.choices(range(minlength, maxlength), k = n_samples) #only from python6
-    # onwards
-    length = [random.choice(range(minlength, maxlength))
-              for k in range(n_samples)]
+    if len_distrib:  # we gave a file with distribution per length
+        p = read_len_distrib(len_distrib, minlength, maxlength)
+        length = np.random.choice(
+            np.arange(minlength, maxlength+1), n_samples, p=p)
+    else:
+        # length = random.choices(range(minlength, maxlength), k = n_samples) #only from python6
+        # onwards
+        length = [random.choice(range(minlength, maxlength+1))
+                  for k in range(n_samples)]
     all_samples = []
     for pos, l in zip(positions, length):
         while 'N' in record[pos:pos + l]:
             # print ("Unknown base (N) in read at {} {},
             # resampling...".format(pos,l), file=sys.stderr) # debug purpose
             pos = random.choice(range(0, len(record) - minlength))
-            l = random.choice(range(minlength, maxlength))
+            if len_distrib:
+                l = np.random.choice(
+                    np.arange(minlength, maxlength+1), 1, p=p)[0]
+            else:
+                l = random.choice(range(minlength, maxlength+1))
         # if not('N' in record[pos:pos+l]): # control for sequences without
         # N's, deprecated by the 'while' statement above
         sample = record[pos:pos + l]
@@ -146,6 +155,20 @@ def chunk_fast(record, n_samples, vcf_in=None, chrom=None, individual=0, unif=Fa
             sample.seq = mutate_unif(sample.seq.tomutable(), unif)
         all_samples += [(sample, pos)]
     return all_samples
+
+
+def read_len_distrib(filename, minlen=35, maxlen=100):
+    from csv import reader
+    with open(filename, 'r', newline='') as csvfile:
+        csvreader = reader(csvfile, delimiter='\t')
+        first_row = csvreader.__next__()
+        read_distrib = [0] * int(first_row[1])+[int(first_row[0])]
+        read_distrib.extend([int(row[0]) for row in csvreader])
+    if len(read_distrib) < maxlen:
+        print("Read length distribution provides values only until",
+              len(read_distrib), "; expected:", maxlen)
+    s = sum(read_distrib[minlen:maxlen+1])
+    return [r / s for r in read_distrib[minlen:maxlen+1]]
 
 
 def estimate_read_distribution(file_in, num_seq, n_chromosomes=None):
@@ -198,6 +221,8 @@ def main():
                         help='Add mutations uniformly distributed', default=0.0)
     parser.add_argument('--individual', type=int,
                         help='The individual used for variation in you VCF', default=0)
+    parser.add_argument(
+        '--length', help='2 columns (#reads, length) TSV file containing read length distribution', default=0.0)
     # either provide a VCF OR a substitution matrix, you probably don't want
     # to deaminate if you choose the latter
     group = parser.add_mutually_exclusive_group()
@@ -254,7 +279,7 @@ def main():
                 else:
                     chrom = chrom.group()[len('chromosome '):-1]
                 all_chunks += chunk_fast(record, num_reads_to_sample[
-                                         num_record], vcf_in, chrom, unif=args.unif, deaminate=args.deaminate, minlength=args.minlen, maxlength=args.maxlen)
+                                         num_record], vcf_in, chrom, unif=args.unif, deaminate=args.deaminate, len_distrib=args.length, minlength=args.minlen, maxlength=args.maxlen)
             if num_record % 100 == 99:  # show progress
                 print(num_record + 1, "sequences parsed...",
                       end="\r", file=sys.stderr)
