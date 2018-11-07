@@ -32,17 +32,16 @@ def get_sequence_with_substitution(sequence):
     for idx, nc in enumerate(sequence):
         pos = positions[idx]
         choice = choices[idx]
-        # TODO optimize speed for pos '30': if prob > max(30), no matter which
+        # TODO optimize speed for pos '30': if prob > max(nc over 30 pos), no matter which
         # base, just use nc
-        if choice > same_nuc[nc]:
+        if choice <= same_nuc[nc]:
             newSeq[idx] = nc
         else:
+            t = tabl[nc].loc[pos].cumsum()
             try:
-                newSeq[idx] = tabl[nc].loc[pos][
-                    tabl[nc].loc[pos] <= choice].idxmax()
-            except:
-                newSeq[idx] = tabl[nc].loc[pos].idxmin()
-                #newSeq[idx] = nc
+                newSeq[idx] = t[choice < t].idxmin()
+            except:  # rounding error when over choice 0.999999
+                newSeq[idx] = t.idxmax()
     return Seq(''.join(newSeq))
     # returns the base relative to our random number for position pos given
     # the real base is nc
@@ -247,8 +246,9 @@ def main():
         # 'A': 0.00797800000000004, -> ~0.79% chances to have a mutation, any sampled number above this would result in keeping the nc
         # this allows us to optimize the algorithm by not using the lookup
         # table and directly keep the nc.
-        same_nuc = {nc: 1 - prob for nc, prob in zip(tabl.columns, min(
-            [[tabl[x][pos][x] for x in tabl] for pos in range(1, 30)]))}
+        same_nuc = {nc: prob for nc, prob in zip(tabl.columns, min(
+            [[tabl[x][pos][x] for x in tabl] for pos in range(31)]))}
+
     num_reads_to_sample = estimate_read_distribution(
         args.file_in, args.num_seq, args.chromosomes)
     with gzip.open(args.file_in, "rt") as file_in:
