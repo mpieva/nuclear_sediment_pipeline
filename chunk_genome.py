@@ -72,6 +72,18 @@ def get_map_pos(n_samples, map_file="/tmp/fred/map_track.bed.gz"):
     with open('/tmp/fred/human.fa', 'w') as file_out:
         SeqIO.write(record_it, file_out, "fasta")
 
+# sort the list of requences according to chromosome
+
+
+def sort_recs(recs, split_char="|"):
+    def sort_func(item):
+        # we sort according to chromosomes
+        # our header is >16|69694935_57|Nea ...
+        # use split to access the first element
+        return item.id.split(split_char)[0]
+
+    return sorted(recs, key=sort_func)
+
 
 def simulate_deamination(sequence, nbases=3):
     while "C" in sequence[:nbases]:  # 5' C to T
@@ -295,7 +307,7 @@ def main():
     print("Done\nWritting down records...", end="", file=sys.stderr)
     # create a new header which includes the read pos, read length
     record_it = (SeqRecord.SeqRecord(record.seq, id="{}|{}_{}".format(record.id, pos, len(record)),
-                                     description=" ".join(record.description.split(' ')[1:])) for record, pos in all_chunks)
+                                     description=" ".join(record.description.split(' ')[1:])) for record, pos in sort_recs(all_chunks))
     if args.outfile:
         with open(args.outfile, 'w') as file_out:
             SeqIO.write(record_it, file_out, "fasta")
