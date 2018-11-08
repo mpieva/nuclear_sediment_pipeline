@@ -78,9 +78,12 @@ def get_map_pos(n_samples, map_file="/tmp/fred/map_track.bed.gz"):
 def sort_recs(recs, split_char="|"):
     def sort_func(item):
         # we sort according to chromosomes
-        # our header is >16|69694935_57|Nea ...
+        # our header is >16|kraken:taxid|9906|69694935_57 ...
         # use split to access the first element
-        return item.id.split(split_char)[0]
+        # last element is pos_length
+        chrom = item.id.split(split_char)[0]
+        pos, l = item.id.split(split_char)[-1].split("_")
+        return (chrom, int(pos), int(l))
 
     return sorted(recs, key=sort_func)
 
@@ -213,6 +216,8 @@ def estimate_read_distribution(file_in, num_seq, n_chromosomes=None):
 def main():
     # Process command line
     parser = argparse.ArgumentParser(description='Split a genome into chuncks')
+    parser.add_argument('--sorted', action='store_true',
+                        help='Sort the reads by chromosome name, position and length')
     parser.add_argument('--num_seq', default=0, type=int,
                         help='Number of sequences to output')
     parser.add_argument(
@@ -305,9 +310,16 @@ def main():
             print("Returning only {} sequences for {}".
                   format(len(all_chunks, record.id)), file=sys.stderr)
     print("Done\nWritting down records...", end="", file=sys.stderr)
-    # create a new header which includes the read pos, read length
-    record_it = (SeqRecord.SeqRecord(record.seq, id="{}|{}_{}".format(record.id, pos, len(record)),
-                                     description=" ".join(record.description.split(' ')[1:])) for record, pos in sort_recs(all_chunks))
+    specie = "|"
+    if args.specie:
+        specie += args.specie.replace(' ', "_")+"|"
+    # create a new header which includes the specie read pos, read length
+    if args.sorted:
+        record_it = sort_recs(SeqRecord.SeqRecord(record.seq, id="{}{}{}_{}".format(record.id, specie, pos, len(record)),
+                                                  description=" ".join(record.description.split(' ')[1:])) for record, pos in all_chunks)
+    else:
+        record_it = (SeqRecord.SeqRecord(record.seq, id="{}{}{}_{}".format(record.id, specie, pos, len(record)),
+                                         description=" ".join(record.description.split(' ')[1:])) for record, pos in all_chunks)
     if args.outfile:
         with open(args.outfile, 'w') as file_out:
             SeqIO.write(record_it, file_out, "fasta")
