@@ -34,10 +34,11 @@ def get_sequence_with_substitution(sequence):
         choice = choices[idx]
         # TODO optimize speed for pos '30': if prob > max(nc over 30 pos), no matter which
         # base, just use nc
+        # we assume the highest proba is the nc itself: C->C, A->A, etc
         if choice <= same_nuc[nc]:
             newSeq[idx] = nc
-        else:
-            t = tabl[nc].loc[pos].cumsum()
+        else:  # do cumsum on sorted values, assuming that the highest proba is the nc itself: C->C, A->A, etc
+            t = tabl[nc].loc[pos].sort_values(ascending=False).cumsum()
             try:
                 newSeq[idx] = t[choice < t].idxmin()
             except:  # rounding error when over choice 0.999999
