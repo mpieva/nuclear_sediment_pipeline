@@ -159,7 +159,7 @@ def chunk_fast(record, n_samples, vcf_in=None, chrom=None, individual=0, unif=Fa
                         if len(vcf_rec.alts[0]) == 1:  # only SNPs
                             sequence[vcf_rec.start - pos] = vcf_rec.alts[0]
                 if deaminate or unif:  # save the seqs for later deam/unif
-                    res.append(sequence)#.toseq()
+                    res.append(sequence)
                 else:
                     sample.seq = sequence.toseq()
                 # print(record[vcf_rec.start-3:vcf_rec.start+4].seq,vcf_rec.ref,vcf_rec.alts,vcf_rec.start,
