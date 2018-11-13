@@ -1,6 +1,9 @@
 import gzip
 from Bio import SeqIO, SeqRecord
 from Bio.Seq import Seq
+import multiprocessing
+# for creating partial function for feeding pool.map
+from functools import partial
 import numpy as np
 import pandas as pd
 import random
@@ -24,15 +27,10 @@ def get_sequence_with_substitution(sequence):
     positions = np.concatenate([np.arange(15), np.arange(29, 14, -1)])
     positions = np.insert(positions, 15, np.full(read_length - 30, 30))
     newSeq = [''] * read_length  # working on list is faster
-    #same_nuc = 1-min([min([tabl[x][pos][x] for pos in range(1,30)]) for x in tabl])
-    #same_nuc = {nc: 1-prob for nc, prob in zip(['A','C','G','T'],min([[tabl[x][pos][x] for x in tabl] for pos in range(1,30)]))}
-
-    # max_other = min([tabl[x][tabl[x]<same_nuc].max() for x in tabl])# this
-    # is the highest value. Anything above we sample the same nuc
     for idx, nc in enumerate(sequence):
         pos = positions[idx]
         choice = choices[idx]
-        # TODO optimize speed for pos '30': if prob > max(nc over 30 pos), no matter which
+        # optimize speed: if prob > max(nc over 30 pos), no matter which
         # base, just use nc
         # we assume the highest proba is the nc itself: C->C, A->A, etc
         if choice <= same_nuc[nc]:
@@ -101,7 +99,7 @@ def mutate_unif(sequence, unif):
     same_nuc = set("ACGT")
     read_length = len(sequence)
     # choices is an array of True/False
-    # we will mutate if or sample is < unif
+    # we will mutate if our sample is < unif
     choices = np.random.random(read_length) < unif
     newSeq = [''] * read_length
     for idx, nc in enumerate(sequence):
@@ -117,7 +115,7 @@ def mutate_unif(sequence, unif):
 # the idea is to generate a set of coordinates/size pairs and only take those substrings:
 # sample 0:length_genome (N = #chunks desired)
 # sample N sizes (N = chunks desired)
-def chunk_fast(record, n_samples, vcf_in=None, chrom=None, individual=0, unif=False, len_distrib=False, deaminate=0, minlength=35, maxlength=100):
+def chunk_fast(record, n_samples, vcf_in=None, chrom=None, individual=0, unif=False, len_distrib=False, deaminate=0, minlength=35, maxlength=100, nthreads=4):
     try:
         positions = random.sample(range(0, len(record)-minlength), n_samples)
     except:
@@ -134,7 +132,7 @@ def chunk_fast(record, n_samples, vcf_in=None, chrom=None, individual=0, unif=Fa
         # onwards
         length = [random.choice(range(minlength, maxlength+1))
                   for k in range(n_samples)]
-    all_samples = []
+    samples = []
     for pos, l in zip(positions, length):
         while 'N' in record[pos:pos + l]:
             # print ("Unknown base (N) in read at {} {},
@@ -147,29 +145,43 @@ def chunk_fast(record, n_samples, vcf_in=None, chrom=None, individual=0, unif=Fa
                 l = random.choice(range(minlength, maxlength+1))
         # if not('N' in record[pos:pos+l]): # control for sequences without
         # N's, deprecated by the 'while' statement above
-        sample = record[pos:pos + l]
-        if vcf_in:  # insert variation from VCF
-            sequence = sample.seq.tomutable()
-            if isinstance(vcf_in, pysam.VariantFile):  # we use a VCF
+        samples += [(record[pos:pos + l], pos)]
+    if vcf_in:  # insert variation from VCF
+        res = []
+        if isinstance(vcf_in, pysam.VariantFile):  # we use a VCF
+            for sample, pos in samples:
+                sequence = sample.seq.tomutable()
+                l = len(sequence)
                 for vcf_rec in vcf_in.fetch(chrom, start=pos, end=pos + l):
                     # Insert alt only if GT != 0/0, use the first individual by
                     # default
                     if any(vcf_rec.samples[0]['GT']):
                         if len(vcf_rec.alts[0]) == 1:  # only SNPs
                             sequence[vcf_rec.start - pos] = vcf_rec.alts[0]
-                sample.seq = sequence.toseq()
+                if deaminate or unif:  # save the seqs for later deam/unif
+                    res.append(sequence)#.toseq()
+                else:
+                    sample.seq = sequence.toseq()
                 # print(record[vcf_rec.start-3:vcf_rec.start+4].seq,vcf_rec.ref,vcf_rec.alts,vcf_rec.start,
                 # pos, l) # debug purpose
-            else:  # we use a variation probability matrix
-                read_length = len(sequence)
-                sample.seq = get_sequence_with_substitution(sequence)
-        if deaminate:
-            sample.seq = simulate_deamination(
-                sample.seq.tomutable(), deaminate)
-        if unif:
-            sample.seq = mutate_unif(sample.seq.tomutable(), unif)
-        all_samples += [(sample, pos)]
-    return all_samples
+        else:  # we use a variation probability matrix
+            # run on multithreaded code as it is the bottleneck (each base is possibly mutated)
+            with multiprocessing.Pool(processes=nthreads) as pool:
+                res = pool.map(get_sequence_with_substitution, [
+                               s.seq.tomutable() for s, p in samples])
+        if len(res):  # run multi-threaded code
+            with multiprocessing.Pool(processes=nthreads) as pool:
+                #res = [s.seq.tomutable() for s, p  in samples]
+                if deaminate:
+                    deam_func = partial(
+                        simulate_deamination, deaminate=deaminate)
+                    res = pool.map(deam_func, res)
+                if unif:
+                    unif_func = partial(mutate_unif, unif=unif)
+                    res = pool.map(unif_func, res)
+            for (s, p), seq in zip(samples, res):
+                s.seq = seq
+    return samples
 
 
 def read_len_distrib(filename, minlen=35, maxlen=100):
@@ -231,6 +243,8 @@ def main():
                         help='Minimum read length (lengths are sampled uniformly)', default=35)
     parser.add_argument('--maxlen', type=int,
                         help='Maximum read length (lengths are sampled uniformly)', default=100)
+    parser.add_argument('--threads', type=int, default=multiprocessing.cpu_count(),
+                        help="Specify number of threads to use")
     # TODO, control for option dependency properly
     parser.add_argument('--deaminate', type=int,
                         help='How many bases should be deaminated of each end', default=0)
@@ -281,7 +295,6 @@ def main():
             # e.g. chromosome 21,)
         # used only when adding variation
         p = re.compile("chromosome \w{1,3},", re.IGNORECASE)
-        # list_records):
         for num_record, record in enumerate(SeqIO.parse(file_in, "fasta")):
             # we want reads only to assigned chromosomes
             if args.chromosomes:
@@ -297,7 +310,8 @@ def main():
                 else:
                     chrom = chrom.group()[len('chromosome '):-1]
                 all_chunks += chunk_fast(record, num_reads_to_sample[
-                                         num_record], vcf_in, chrom, unif=args.unif, deaminate=args.deaminate, len_distrib=args.length, minlength=args.minlen, maxlength=args.maxlen)
+                                         num_record], vcf_in, chrom, unif=args.unif, deaminate=args.deaminate, len_distrib=args.length, minlength=args.minlen, maxlength=args.maxlen, nthreads=args.threads)
+
             if num_record % 100 == 99:  # show progress
                 print(num_record + 1, "sequences parsed...",
                       end="\r", file=sys.stderr)
