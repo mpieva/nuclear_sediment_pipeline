@@ -196,22 +196,28 @@ def estimate_read_distribution(file_in, num_seq, n_chromosomes=None):
                     print("Working only with the first",
                           n_chromosomes, file=sys.stderr)
                     full_size = sum(fa.lengths[:n_chromosomes])
-                    size_percent = [
+                    reads_per_chrom = [
                         int(s / full_size * num_seq) + 1 for s in fa.lengths[:n_chromosomes]]
                 else:
+                    n_chromosomes = len(fa.lengths)
                     full_size = sum(fa.lengths)
-                    size_percent = [
+                    reads_per_chrom = [
                         int(s / full_size * num_seq) + 1 for s in fa.lengths]
-            return (size_percent)
     except OSError:  # fasta is not bgzip'd do a naive fallback
         print("Error, fasta file not indexed, doing naive sampling...",
               file=sys.stderr)
         if n_chromosomes:
-            return [int(num_seq / n_chromosomes) + 1] * n_chromosomes
+            reads_per_chrom = [
+                int(num_seq / n_chromosomes) + 1] * n_chromosomes
         else:
             print(
                 "Naive sampling needs the option --chromosomes...Aborting...", file=sys.stderr)
             sys.exit(1)
+    # our samplig tends to over sample, readjust by removing reads on random chromosomes
+    extra_samples = sum(reads_per_chrom) - num_seq
+    for idx in [random.randint(0, n_chromosomes-1) for _ in range(extra_samples)]:
+        reads_per_chrom[idx] -= 1
+    return reads_per_chrom
 
 
 def main():
@@ -303,13 +309,6 @@ def main():
                       end="\r", file=sys.stderr)
         if args.vcf:
             vcf_in.close()
-        print("Sampling done, merging...", end="", file=sys.stderr)
-        try:
-            if len(all_chunks) > args.num_seq:
-                all_chunks = random.sample(all_chunks, args.num_seq)
-        except ValueError:
-            print("Returning only {} sequences for {}".
-                  format(len(all_chunks, record.id)), file=sys.stderr)
     print("Done\nWritting down records...", end="", file=sys.stderr)
     specie = "|"
     if args.specie:
