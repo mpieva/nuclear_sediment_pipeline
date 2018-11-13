@@ -228,6 +228,9 @@ def estimate_read_distribution(file_in, num_seq, n_chromosomes=None):
     # our samplig tends to over sample, readjust by removing reads on random chromosomes
     extra_samples = sum(reads_per_chrom) - num_seq
     for idx in [random.randint(0, n_chromosomes-1) for _ in range(extra_samples)]:
+        # some scaffolds are so small that the don't even get a read to sample.
+        while reads_per_chrom[idx] == 0:
+            idx = random.randint(0, n_chromosomes-1)
         reads_per_chrom[idx] -= 1
     return reads_per_chrom
 
@@ -303,6 +306,8 @@ def main():
         p = re.compile("chromosome \w{1,3},", re.IGNORECASE)
         for num_record, record in enumerate(SeqIO.parse(file_in, "fasta")):
             # we want reads only to assigned chromosomes
+            if num_reads_to_sample[num_record] == 0: # skip this sequence
+                continue
             if args.chromosomes:
                 print("Parsing chromosome", num_record +
                       1, end="\r", file=sys.stderr)
