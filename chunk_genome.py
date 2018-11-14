@@ -11,7 +11,7 @@ import sys
 import pysam
 import re
 import argparse
-
+import contextlib
 
 # 30,000,000 with 99% bacteria => 99% bacteria, 0.5% hyena, 0.3% cow, 0.15% pig, 0.04% mammoth, 0.01% Human
 # 0.5 -> 95912 0.3% -> 9913, 0.15% -> 9823, 0.04 -> 9785 0.01,  -> 9606
@@ -75,6 +75,9 @@ def get_map_pos(n_samples, map_file="/tmp/fred/map_track.bed.gz"):
 
 
 def sort_recs(recs, split_char="|"):
+    chroms = sorted(set([item.id.split(split_char)[0] for item in recs]), key=lambda key: [
+                    int(text) if text.isdigit() else text for text in re.split('([0-9]+)', key)])
+
     def sort_func(item):
         # we sort according to chromosomes
         # our header is >16|kraken:taxid|9906|69694935_57 ...
@@ -82,7 +85,7 @@ def sort_recs(recs, split_char="|"):
         # last element is pos_length
         chrom = item.id.split(split_char)[0]
         pos, l = item.id.split(split_char)[-1].split("_")
-        return (chrom, int(pos), int(l))
+        return (chroms.index(chrom), int(pos), int(l))
 
     return sorted(recs, key=sort_func)
 
@@ -215,7 +218,7 @@ def estimate_read_distribution(file_in, num_seq, n_chromosomes=None):
                     full_size = sum(fa.lengths)
                     reads_per_chrom = [
                         int(s / full_size * num_seq) + 1 for s in fa.lengths]
-    except OSError:  # fasta is not bgzip'd do a naive fallback
+    except OSError:  # fasta is not indexed do a naive fallback
         print("Error, fasta file not indexed, doing naive sampling...",
               file=sys.stderr)
         if n_chromosomes:
@@ -234,6 +237,13 @@ def estimate_read_distribution(file_in, num_seq, n_chromosomes=None):
         reads_per_chrom[idx] -= 1
     return reads_per_chrom
 
+# dummy function used for opening a file non-gzipped
+
+
+@contextlib.contextmanager
+def ret_file(f):
+    yield f
+
 
 def main():
     # Process command line
@@ -245,7 +255,8 @@ def main():
     parser.add_argument(
         '--outfile',  help='Fasta file where to extract sequence')
     parser.add_argument('--specie',  help='Specie Taxa')
-    parser.add_argument('file_in', metavar="genome.fa.gz, bgzip'd and indexed")
+    parser.add_argument(
+        'file_in', metavar="genome.fa[.gz], [bgzip] and indexed")
     parser.add_argument('--chromosomes', type=int,
                         help='How many chromosomes are expected', default=0)
     parser.add_argument('--minlen', type=int,
@@ -292,7 +303,7 @@ def main():
 
     num_reads_to_sample = estimate_read_distribution(
         args.file_in, args.num_seq, args.chromosomes)
-    with gzip.open(args.file_in, "rt") as file_in:
+    with gzip.open(args.file_in, "rt") if args.file_in.endswith("gz") else ret_file(args.file_in) as file_in:
         all_chunks = []
         vcf_in = args.substitution_file  # will be none if we use a VCF file
         chrom = None
@@ -307,12 +318,12 @@ def main():
         for num_record, record in enumerate(SeqIO.parse(file_in, "fasta")):
             # we want reads only to assigned chromosomes
             if args.chromosomes:
-                print("Parsing chromosome", num_record +
-                      1, end="\r", file=sys.stderr)
                 if num_record > args.chromosomes - 1:  # num_record is 0-based
                     # assume the genome is sorted, with chromosomes first...
                     break
-            if num_reads_to_sample[num_record] == 0: # skip this sequence
+                print("Parsing chromosome", num_record +
+                      1, end="\r", file=sys.stderr)
+            if num_reads_to_sample[num_record] == 0:  # skip this sequence
                 continue
             if args.vcf or args.substitution_file:
                 chrom = p.search(record.description)
