@@ -306,14 +306,14 @@ def main():
         p = re.compile("chromosome \w{1,3},", re.IGNORECASE)
         for num_record, record in enumerate(SeqIO.parse(file_in, "fasta")):
             # we want reads only to assigned chromosomes
-            if num_reads_to_sample[num_record] == 0: # skip this sequence
-                continue
             if args.chromosomes:
                 print("Parsing chromosome", num_record +
                       1, end="\r", file=sys.stderr)
                 if num_record > args.chromosomes - 1:  # num_record is 0-based
                     # assume the genome is sorted, with chromosomes first...
                     break
+            if num_reads_to_sample[num_record] == 0: # skip this sequence
+                continue
             if args.vcf or args.substitution_file:
                 chrom = p.search(record.description)
                 if not chrom:
