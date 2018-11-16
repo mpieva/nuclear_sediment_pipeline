@@ -74,10 +74,10 @@ def get_map_pos(n_samples, map_file="/tmp/fred/map_track.bed.gz"):
 # sort the list of requences according to chromosome
 
 
-def sort_recs(recs, split_char="|"):
-    chroms = sorted(set([item.id.split(split_char)[0] for item in recs]), key=lambda key: [
-                    int(text) if text.isdigit() else text for text in re.split('([0-9]+)', key)])
-
+def sort_recs(recs, chromosome_list, split_char="|"):
+    #chroms = sorted(set([item.id.split(split_char)[0] for item in recs]), key=lambda key: [
+    #                int(text) if text.isdigit() else text for text in re.split('([0-9]+)', key)])
+    
     def sort_func(item):
         # we sort according to chromosomes
         # our header is >16|kraken:taxid|9906|69694935_57 ...
@@ -85,7 +85,8 @@ def sort_recs(recs, split_char="|"):
         # last element is pos_length
         chrom = item.id.split(split_char)[0]
         pos, l = item.id.split(split_char)[-1].split("_")
-        return (chroms.index(chrom), int(pos), int(l))
+        #return (chroms.index(chrom), int(pos), int(l))
+        return (chromosome_list.index(chrom), int(pos), int(l))
 
     return sorted(recs, key=sort_func)
 
@@ -96,7 +97,6 @@ def simulate_deamination(sequence, nbases=3):
     while "C" in sequence[-nbases:]:  # 3' C to T
         sequence[-nbases + sequence[-nbases:].index("C")] = "T"
     return sequence.toseq()
-
 
 def mutate_unif(sequence, unif):
     same_nuc = set("ACGT")
@@ -302,6 +302,7 @@ def main():
         all_chunks = []
         vcf_in = args.substitution_file  # will be none if we use a VCF file
         chrom = None
+        chromosomes = []
         if args.vcf:
             vcf_in = pysam.VariantFile(args.vcf)
             # subset the VCF to 1 individual only
@@ -320,12 +321,13 @@ def main():
                       1, end="\r", file=sys.stderr)
             if num_reads_to_sample[num_record] == 0:  # skip this sequence
                 continue
+            chrom = p.search(record.description)
+            if not chrom:
+                chrom = record.id  # in case of scaffold genome
+            else:
+                chrom = chrom.group()[len('chromosome '):-1]
+            chromosomes.append(chrom)
             if args.vcf or args.substitution_file:
-                chrom = p.search(record.description)
-                if not chrom:
-                    chrom = record.id  # in case of scaffold genome
-                else:
-                    chrom = chrom.group()[len('chromosome '):-1]
                 all_chunks += chunk_fast(record, num_reads_to_sample[
                                          num_record], vcf_in, chrom, unif=args.unif, deaminate=args.deaminate, len_distrib=args.length, minlength=args.minlen, maxlength=args.maxlen, nthreads=args.threads)
 
@@ -340,9 +342,10 @@ def main():
         specie += args.specie.replace(' ', "_")+"|"
     # create a new header which includes the specie read pos, read length
     if args.sorted:
-        record_it = sort_recs(SeqRecord.SeqRecord(record.seq, id="{}{}{}_{}".format(record.id, specie, pos, len(record)),
-                                                  description=" ".join(record.description.split(' ')[1:])) for record, pos in all_chunks)
+        record_it = sort_recs((SeqRecord.SeqRecord(record.seq, id="{}{}{}_{}".format(record.id, specie, pos, len(record)),
+                                                  description=" ".join(record.description.split(' ')[1:])) for record, pos in all_chunks), chromosome_list=chromosomes)
     else:
+        random.shuffle(all_chunks)
         record_it = (SeqRecord.SeqRecord(record.seq, id="{}{}{}_{}".format(record.id, specie, pos, len(record)),
                                          description=" ".join(record.description.split(' ')[1:])) for record, pos in all_chunks)
     if args.outfile:
