@@ -123,10 +123,10 @@ def chunk_fast(record, n_samples, vcf_in=None, chrom=None, individual=0, unif=Fa
         length = np.random.choice(
             np.arange(minlength, maxlength+1), n_samples, p=p)
     else:
-        # length = random.choices(range(minlength, maxlength), k = n_samples) #only from python6
+        # length = random.choices(range(minlength, maxlength), k = n_samples) #only from python3.6
         # onwards
-        length = [random.choice(range(minlength, maxlength+1))
-                  for k in range(n_samples)]
+        length = np.random.choice(
+            np.arange(minlength, maxlength+1), n_samples)
     samples = []
     for pos, l in zip(positions, length):
         while 'N' in record[pos:pos + l]:
