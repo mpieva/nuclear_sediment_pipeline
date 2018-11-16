@@ -101,17 +101,12 @@ def simulate_deamination(sequence, nbases=3):
 def mutate_unif(sequence, unif):
     same_nuc = set("ACGT")
     read_length = len(sequence)
-    # choices is an array of True/False
-    # we will mutate if our sample is < unif
-    choices = np.random.random(read_length) < unif
-    newSeq = [''] * read_length
-    for idx, nc in enumerate(sequence):
-        mutate = choices[idx]
-        if mutate:
-            # we call tuple in order to do random.choice (and remove the current nc from the possibilities)
-            newSeq[idx] = random.choice(tuple(same_nuc.difference(nc)))
-        else:
-            newSeq[idx] = nc
+    # we will mutate a base only if our sample is < unif
+    choices, = np.where(np.random.random(read_length) < unif)
+    newSeq = list(sequence)
+    for idx in choices:
+        # we call tuple in order to do random.choice (and remove the current nc from the possibilities)
+        newSeq[idx] = random.choice(tuple(same_nuc.difference(sequence[idx])))
     return Seq(''.join(newSeq))
 
 
