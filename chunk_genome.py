@@ -75,9 +75,6 @@ def get_map_pos(n_samples, map_file="/tmp/fred/map_track.bed.gz"):
 
 
 def sort_recs(recs, chromosome_list, split_char="|"):
-    #chroms = sorted(set([item.id.split(split_char)[0] for item in recs]), key=lambda key: [
-    #                int(text) if text.isdigit() else text for text in re.split('([0-9]+)', key)])
-    
     def sort_func(item):
         # we sort according to chromosomes
         # our header is >16|kraken:taxid|9906|69694935_57 ...
@@ -85,7 +82,6 @@ def sort_recs(recs, chromosome_list, split_char="|"):
         # last element is pos_length
         chrom = item.id.split(split_char)[0]
         pos, l = item.id.split(split_char)[-1].split("_")
-        #return (chroms.index(chrom), int(pos), int(l))
         return (chromosome_list.index(chrom), int(pos), int(l))
 
     return sorted(recs, key=sort_func)
@@ -97,6 +93,7 @@ def simulate_deamination(sequence, nbases=3):
     while "C" in sequence[-nbases:]:  # 3' C to T
         sequence[-nbases + sequence[-nbases:].index("C")] = "T"
     return sequence.toseq()
+
 
 def mutate_unif(sequence, unif):
     same_nuc = set("ACGT")
@@ -243,8 +240,6 @@ def ret_file(f):
 def main():
     # Process command line
     parser = argparse.ArgumentParser(description='Split a genome into chuncks')
-    parser.add_argument('--sorted', action='store_true',
-                        help='Sort the reads by chromosome name, position and length')
     parser.add_argument('--num_seq', default=0, type=int,
                         help='Number of sequences to output')
     parser.add_argument(
@@ -276,6 +271,11 @@ def main():
         '--vcf',  help='VCF containing the variation to be included in the samples')
     group.add_argument("--substitution_file", type=open,
                        help='File containing the substitution probability matrix')
+    sorting = parser.add_mutually_exclusive_group()
+    sorting.add_argument('--sorted', action='store_true',
+                         help='Natural sort the reads by chromosome name, position and length')
+    sorting.add_argument('--shuffled', action='store_true',
+                         help='Output shuffled reads')
     args = parser.parse_args()
 
     print("Loading dataset...", end="", file=sys.stderr)
@@ -341,9 +341,13 @@ def main():
     if args.specie:
         specie += args.specie.replace(' ', "_")+"|"
     # create a new header which includes the specie read pos, read length
-    if args.sorted:
+    if not args.shuffled:
+        if args.sorted:  # we will do a natural sort on the chromosomes
+            chromosomes.sort(key=lambda key: [int(text) if text.isdigit(
+            ) else text for text in re.split('([0-9]+)', key)])
+        # create a new header which includes the specie read pos, read length
         record_it = sort_recs((SeqRecord.SeqRecord(record.seq, id="{}{}{}_{}".format(record.id, specie, pos, len(record)),
-                                                  description=" ".join(record.description.split(' ')[1:])) for record, pos in all_chunks), chromosome_list=chromosomes)
+                                                   description=" ".join(record.description.split(' ')[1:])) for record, pos in all_chunks), chromosome_list=chromosomes)
     else:
         random.shuffle(all_chunks)
         record_it = (SeqRecord.SeqRecord(record.seq, id="{}{}{}_{}".format(record.id, specie, pos, len(record)),
