@@ -110,7 +110,7 @@ def mutate_unif(sequence, unif):
 # the idea is to generate a set of coordinates/size pairs and only take those substrings:
 # sample 0:length_genome (N = #chunks desired)
 # sample N sizes (N = chunks desired)
-def chunk_fast(record, n_samples, vcf_in=None, chrom=None, individual=0, unif=False, len_distrib=False, deaminate=0, minlength=35, maxlength=100, nthreads=4):
+def chunk_fast(record, n_samples, vcf_in=None, chrom=None, specie="|", individual=0, unif=False, len_distrib=False, deaminate=0, minlength=35, maxlength=100, nthreads=4):
     try:
         positions = random.sample(range(0, len(record)-minlength), n_samples)
     except:
@@ -140,11 +140,14 @@ def chunk_fast(record, n_samples, vcf_in=None, chrom=None, individual=0, unif=Fa
                 l = random.choice(range(minlength, maxlength+1))
         # if not('N' in record[pos:pos+l]): # control for sequences without
         # N's, deprecated by the 'while' statement above
-        samples += [(record[pos:pos + l], pos)]
+
+        # create a new header which includes the specie read pos, read length
+        samples += [SeqRecord.SeqRecord(record.seq[pos:pos+l], id="{}{}{}_{}".format(record.id, specie, pos, l),
+                                        description=" ".join(record.description.split(' ')[1:]))]
     if vcf_in:  # insert variation from VCF
         res = []
         if isinstance(vcf_in, pysam.VariantFile):  # we use a VCF
-            for sample, pos in samples:
+            for sample in samples:
                 sequence = sample.seq.tomutable()
                 l = len(sequence)
                 for vcf_rec in vcf_in.fetch(chrom, start=pos, end=pos + l):
@@ -163,10 +166,9 @@ def chunk_fast(record, n_samples, vcf_in=None, chrom=None, individual=0, unif=Fa
             # run on multithreaded code as it is the bottleneck (each base is possibly mutated)
             with multiprocessing.Pool(processes=nthreads) as pool:
                 res = pool.map(get_sequence_with_substitution, [
-                               s.seq.tomutable() for s, p in samples])
+                               s.seq.tomutable() for s in samples])
         if len(res):  # run multi-threaded code
             with multiprocessing.Pool(processes=nthreads) as pool:
-                #res = [s.seq.tomutable() for s, p  in samples]
                 if deaminate:
                     deam_func = partial(
                         simulate_deamination, deaminate=deaminate)
@@ -174,7 +176,7 @@ def chunk_fast(record, n_samples, vcf_in=None, chrom=None, individual=0, unif=Fa
                 if unif:
                     unif_func = partial(mutate_unif, unif=unif)
                     res = pool.map(unif_func, res)
-            for (s, p), seq in zip(samples, res):
+            for s, seq in zip(samples, res):
                 s.seq = seq
     return samples
 
@@ -220,7 +222,7 @@ def estimate_read_distribution(file_in, num_seq, n_chromosomes=None):
             print(
                 "Naive sampling needs the option --chromosomes...Aborting...", file=sys.stderr)
             sys.exit(1)
-    # our samplig tends to over sample, readjust by removing reads on random chromosomes
+    # our samplig tends to slightly over sample, readjust by removing reads on random chromosomes
     extra_samples = sum(reads_per_chrom) - num_seq
     for idx in [random.randint(0, n_chromosomes-1) for _ in range(extra_samples)]:
         # some scaffolds are so small that the don't even get a read to sample.
@@ -229,9 +231,8 @@ def estimate_read_distribution(file_in, num_seq, n_chromosomes=None):
         reads_per_chrom[idx] -= 1
     return reads_per_chrom
 
+
 # dummy function used for opening a file non-gzipped
-
-
 @contextlib.contextmanager
 def ret_file(f):
     yield f
@@ -298,6 +299,9 @@ def main():
 
     num_reads_to_sample = estimate_read_distribution(
         args.file_in, args.num_seq, args.chromosomes)
+    specie = "|"
+    if args.specie:
+        specie += args.specie.replace(' ', "_")+"|"
     with gzip.open(args.file_in, "rt") if args.file_in.endswith("gz") else ret_file(args.file_in) as file_in:
         all_chunks = []
         vcf_in = args.substitution_file  # will be none if we use a VCF file
@@ -309,7 +313,6 @@ def main():
             vcf_in.subset_samples([vcf_in.header.samples[args.individual]])
             # our chromosome can contain up to 3 characters (most likely 2 max:
             # e.g. chromosome 21,)
-        # used only when adding variation
         p = re.compile("chromosome \w{1,3},", re.IGNORECASE)
         for num_record, record in enumerate(SeqIO.parse(file_in, "fasta")):
             # we want reads only to assigned chromosomes
@@ -329,7 +332,7 @@ def main():
             chromosomes.append(chrom)
             if args.vcf or args.substitution_file:
                 all_chunks += chunk_fast(record, num_reads_to_sample[
-                                         num_record], vcf_in, chrom, unif=args.unif, deaminate=args.deaminate, len_distrib=args.length, minlength=args.minlen, maxlength=args.maxlen, nthreads=args.threads)
+                                         num_record], vcf_in, chrom, specie, unif=args.unif, deaminate=args.deaminate, len_distrib=args.length, minlength=args.minlen, maxlength=args.maxlen, nthreads=args.threads)
 
             if num_record % 100 == 99:  # show progress
                 print(num_record + 1, "sequences parsed...",
@@ -337,26 +340,18 @@ def main():
         if args.vcf:
             vcf_in.close()
     print("Done\nWritting down records...", end="", file=sys.stderr)
-    specie = "|"
-    if args.specie:
-        specie += args.specie.replace(' ', "_")+"|"
-    # create a new header which includes the specie read pos, read length
     if not args.shuffled:
         if args.sorted:  # we will do a natural sort on the chromosomes
             chromosomes.sort(key=lambda key: [int(text) if text.isdigit(
             ) else text for text in re.split('([0-9]+)', key)])
-        # create a new header which includes the specie read pos, read length
-        record_it = sort_recs((SeqRecord.SeqRecord(record.seq, id="{}{}{}_{}".format(record.id, specie, pos, len(record)),
-                                                   description=" ".join(record.description.split(' ')[1:])) for record, pos in all_chunks), chromosome_list=chromosomes)
+        all_chunks = sort_recs(all_chunks, chromosome_list=chromosomes)
     else:
         random.shuffle(all_chunks)
-        record_it = (SeqRecord.SeqRecord(record.seq, id="{}{}{}_{}".format(record.id, specie, pos, len(record)),
-                                         description=" ".join(record.description.split(' ')[1:])) for record, pos in all_chunks)
     if args.outfile:
         with open(args.outfile, 'w') as file_out:
-            SeqIO.write(record_it, file_out, "fasta")
+            SeqIO.write(all_chunks, file_out, "fasta")
     else:
-        SeqIO.write(record_it, sys.stdout, "fasta")
+        SeqIO.write(all_chunks, sys.stdout, "fasta")
     print("Done", file=sys.stderr)
 
 
