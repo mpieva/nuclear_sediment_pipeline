@@ -132,7 +132,8 @@ def chunk_fast(record, n_samples, vcf_in=None, chrom=None, specie="|", individua
             np.arange(minlength, maxlength+1), n_samples)
     samples = []
     for pos, l in zip(positions, length):
-        while 'N' in record[pos:pos + l]:
+        rec = record[pos:pos + l]
+        while not set(rec).issubset('ACGT'):  # control for unknown bases
             # print ("Unknown base (N) in read at {} {},
             # resampling...".format(pos,l), file=sys.stderr) # debug purpose
             pos = random.choice(range(0, len(record) - minlength))
@@ -141,12 +142,13 @@ def chunk_fast(record, n_samples, vcf_in=None, chrom=None, specie="|", individua
                     np.arange(minlength, maxlength+1), 1, p=p)[0]
             else:
                 l = random.choice(range(minlength, maxlength+1))
+            rec = record[pos:pos + l]
         # if not('N' in record[pos:pos+l]): # control for sequences without
         # N's, deprecated by the 'while' statement above
 
         # create a new header which includes the specie read pos, read length
-        samples += [SeqRecord.SeqRecord(record.seq[pos:pos+l], id="{}{}{}_{}".format(record.id, specie, pos, l),
-                                        description=" ".join(record.description.split(' ')[1:]))]
+        samples += [SeqRecord.SeqRecord(rec.seq, id="{}{}{}_{}".format(rec.id, specie, pos, l), 
+                                        description=" ".join(rec.description.split(' ')[1:]))]
     if vcf_in:  # insert variation from VCF
         res = []
         if isinstance(vcf_in, pysam.VariantFile):  # we use a VCF
@@ -360,7 +362,7 @@ def main():
             all_chunks = sort_recs(all_chunks, chromosome_list=chromosomes)
         if args.shuffled or args.sorted:
             SeqIO.write(all_chunks, file_out, "fasta")
-        print("Done", file=sys.stderr)
+    print("Done", file=sys.stderr)
 
 
 if __name__ == "__main__":
