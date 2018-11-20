@@ -66,12 +66,13 @@ def get_map_pos(n_samples, map_file="/tmp/fred/map_track.bed.gz"):
     with open('/tmp/fred/human.fa', 'w') as file_out:
         SeqIO.write(record_it, file_out, "fasta")
 
+
 def get_chrom(refseq):
     chrom = refseq.id  # in case of scaffold genome
     if "|" in chrom:
         chrom = chrom.split("|")[0]
     return chrom
-    
+
 # sort the list of requences according to chromosome
 
 
@@ -143,11 +144,9 @@ def chunk_fast(record, n_samples, vcf_in=None, chrom=None, specie="|", individua
             else:
                 l = random.choice(range(minlength, maxlength+1))
             rec = record[pos:pos + l]
-        # if not('N' in record[pos:pos+l]): # control for sequences without
-        # N's, deprecated by the 'while' statement above
 
         # create a new header which includes the specie read pos, read length
-        samples += [SeqRecord.SeqRecord(rec.seq, id="{}{}{}_{}".format(rec.id, specie, pos, l), 
+        samples += [SeqRecord.SeqRecord(rec.seq, id="{}{}{}_{}".format(rec.id, specie, pos, l),
                                         description=" ".join(rec.description.split(' ')[1:]))]
     if vcf_in:  # insert variation from VCF
         res = []
@@ -300,12 +299,12 @@ def main():
         # this allows us to optimize the algorithm by not using the lookup
         # table and directly keep the nc.
         same_nuc = [{nc: prob for nc, prob in zip(tabl.columns,
-                    [tabl[x][pos][x] for x in tabl])} for pos in range(31)]
+                                                  [tabl[x][pos][x] for x in tabl])} for pos in range(31)]
         for nc in 'ACGT':
             for pos in range(31):
                 # do cumsum on sorted values, assuming that the highest proba is the nc itself: C->C, A->A, etc
                 tabl[nc][pos] = [tabl[nc][pos].sort_values(ascending=False).cumsum()[
-                                    to] for to in tabl.columns]
+                    to] for to in tabl.columns]
     num_reads_to_sample = estimate_read_distribution(
         args.file_in, args.num_seq, args.chromosomes)
     specie = "|"
@@ -338,6 +337,7 @@ def main():
             else:
                 chrom = chrom.group()[len('chromosome '):-1]
             if args.vcf or args.substitution_file:
+                # we write chromosomes in the same order as the given input.
                 if not args.shuffled and not args.sorted:
                     all_chunks = sort_recs(chunk_fast(record, num_reads_to_sample[
                         num_record], vcf_in, chrom, specie, unif=args.unif, deaminate=args.deaminate, len_distrib=args.length,
@@ -346,7 +346,7 @@ def main():
                 else:
                     chromosomes.append(chrom)
                     all_chunks += chunk_fast(record, num_reads_to_sample[
-                                         num_record], vcf_in, chrom, specie, unif=args.unif, deaminate=args.deaminate, len_distrib=args.length, minlength=args.minlen, maxlength=args.maxlen, nthreads=args.threads)
+                        num_record], vcf_in, chrom, specie, unif=args.unif, deaminate=args.deaminate, len_distrib=args.length, minlength=args.minlen, maxlength=args.maxlen, nthreads=args.threads)
 
             if num_record % 100 == 99:  # show progress
                 print(num_record + 1, "sequences parsed...",
@@ -358,7 +358,7 @@ def main():
             random.shuffle(all_chunks)
         if args.sorted:  # we will do a natural sort on the chromosomes
             chromosomes.sort(key=lambda key: [int(text) if text.isdigit(
-                            ) else text for text in re.split('([0-9]+)', key)])
+            ) else text for text in re.split('([0-9]+)', key)])
             all_chunks = sort_recs(all_chunks, chromosome_list=chromosomes)
         if args.shuffled or args.sorted:
             SeqIO.write(all_chunks, file_out, "fasta")
