@@ -23,27 +23,22 @@ random.seed()
 
 def get_sequence_with_substitution(sequence):
     read_length = len(sequence)
+    # create a set of draws
     choices = np.random.random(read_length)
+    # create a profile sequence with as many profile 30 relative to read_length
     positions = np.concatenate([np.arange(15), np.arange(29, 14, -1)])
     positions = np.insert(positions, 15, np.full(read_length - 30, 30))
-    newSeq = [''] * read_length  # working on list is faster
-    for idx, nc in enumerate(sequence):
-        pos = positions[idx]
-        choice = choices[idx]
-        # optimize speed: if prob > max(nc over 30 pos), no matter which
-        # base, just use nc
-        # we assume the highest proba is the nc itself: C->C, A->A, etc
-        if choice <= same_nuc[nc]:
-            newSeq[idx] = nc
-        else:  # do cumsum on sorted values, assuming that the highest proba is the nc itself: C->C, A->A, etc
-            t = tabl[nc].loc[pos].sort_values(ascending=False).cumsum()
+    newSeq = list(sequence)
+    # iterate over the sequence, choices and positions
+    for idx, (nc, (choice, pos)) in enumerate(zip(sequence, zip(choices, positions))):
+        # we draw a probability which allows us to mutate
+        if choice > same_nuc[pos][nc]:
+            t = tabl[nc].loc[pos]
             try:
                 newSeq[idx] = t[choice < t].idxmin()
             except:  # rounding error when over choice 0.999999
                 newSeq[idx] = t.idxmax()
     return Seq(''.join(newSeq))
-    # returns the base relative to our random number for position pos given
-    # the real base is nc
 
 # specific code to work with mappability track...
 
@@ -302,9 +297,13 @@ def main():
         # 'A': 0.00797800000000004, -> ~0.79% chances to have a mutation, any sampled number above this would result in keeping the nc
         # this allows us to optimize the algorithm by not using the lookup
         # table and directly keep the nc.
-        same_nuc = {nc: prob for nc, prob in zip(tabl.columns, min(
-            [[tabl[x][pos][x] for x in tabl] for pos in range(31)]))}
-
+        same_nuc = [{nc: prob for nc, prob in zip(tabl.columns,
+                    [tabl[x][pos][x] for x in tabl])} for pos in range(31)]
+        for nc in 'ACGT':
+            for pos in range(31):
+                # do cumsum on sorted values, assuming that the highest proba is the nc itself: C->C, A->A, etc
+                tabl[nc][pos] = [tabl[nc][pos].sort_values(ascending=False).cumsum()[
+                                    to] for to in tabl.columns]
     num_reads_to_sample = estimate_read_distribution(
         args.file_in, args.num_seq, args.chromosomes)
     specie = "|"
