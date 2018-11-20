@@ -346,20 +346,15 @@ def main():
                       end="\r", file=sys.stderr)
         if args.vcf:
             vcf_in.close()
-    print("Done\nWritting down records...", end="", file=sys.stderr)
-    if args.shuffled:
-        random.shuffle(all_chunks)
-
-    if args.sorted:  # we will do a natural sort on the chromosomes
-        chromosomes.sort(key=lambda key: [int(text) if text.isdigit(
-                        ) else text for text in re.split('([0-9]+)', key)])
-        all_chunks = sort_recs(all_chunks, chromosome_list=chromosomes)
-    if args.outfile:
-        with open(args.outfile, 'w') as file_out:
-            SeqIO.write(all_chunks, file_out, "fasta")
-    else:
-        SeqIO.write(all_chunks, sys.stdout, "fasta")
-    print("Done", file=sys.stderr)
+        print("Done\nWritting down records...", end="", file=sys.stderr)
+        if args.shuffled:
+            random.shuffle(all_chunks)
+        if args.sorted:  # we will do a natural sort on the chromosomes
+            chromosomes.sort(key=lambda key: [int(text) if text.isdigit(
+                            ) else text for text in re.split('([0-9]+)', key)])
+            all_chunks = sort_recs(all_chunks, chromosome_list=chromosomes)
+        SeqIO.write(all_chunks, file_out, "fasta")
+        print("Done", file=sys.stderr)
 
 
 if __name__ == "__main__":
