@@ -353,7 +353,8 @@ def main():
             chromosomes.sort(key=lambda key: [int(text) if text.isdigit(
                             ) else text for text in re.split('([0-9]+)', key)])
             all_chunks = sort_recs(all_chunks, chromosome_list=chromosomes)
-        SeqIO.write(all_chunks, file_out, "fasta")
+        if args.shuffled or args.sorted:
+            SeqIO.write(all_chunks, file_out, "fasta")
         print("Done", file=sys.stderr)
 
 
