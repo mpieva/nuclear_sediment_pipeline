@@ -74,7 +74,7 @@ def get_map_pos(n_samples, map_file="/tmp/fred/map_track.bed.gz"):
 # sort the list of requences according to chromosome
 
 
-def sort_recs(recs, chromosome_list, split_char="|"):
+def sort_recs(recs, chromosome_list=[], split_char="|"):
     def sort_func(item):
         # we sort according to chromosomes
         # our header is >16|kraken:taxid|9906|69694935_57 ...
@@ -82,8 +82,10 @@ def sort_recs(recs, chromosome_list, split_char="|"):
         # last element is pos_length
         chrom = item.id.split(split_char)[0]
         pos, l = item.id.split(split_char)[-1].split("_")
-        return (chromosome_list.index(chrom), int(pos), int(l))
-
+        if chromosome_list:
+            return (chromosome_list.index(chrom), int(pos), int(l))
+        else:
+            return (int(pos), int(l))
     return sorted(recs, key=sort_func)
 
 
@@ -302,10 +304,9 @@ def main():
     specie = "|"
     if args.specie:
         specie += args.specie.replace(' ', "_")+"|"
-    with gzip.open(args.file_in, "rt") if args.file_in.endswith("gz") else ret_file(args.file_in) as file_in:
+    with gzip.open(args.file_in, "rt") if args.file_in.endswith("gz") else ret_file(args.file_in) as file_in, open(args.outfile, 'w') if args.outfile else sys.stdout as file_out:
         all_chunks = []
         vcf_in = args.substitution_file  # will be none if we use a VCF file
-        chrom = None
         chromosomes = []
         if args.vcf:
             vcf_in = pysam.VariantFile(args.vcf)
@@ -329,9 +330,15 @@ def main():
                 chrom = record.id  # in case of scaffold genome
             else:
                 chrom = chrom.group()[len('chromosome '):-1]
-            chromosomes.append(chrom)
             if args.vcf or args.substitution_file:
-                all_chunks += chunk_fast(record, num_reads_to_sample[
+                if not args.shuffled and not args.sorted:
+                    all_chunks = sort_recs(chunk_fast(record, num_reads_to_sample[
+                        num_record], vcf_in, chrom, specie, unif=args.unif, deaminate=args.deaminate, len_distrib=args.length,
+                        minlength=args.minlen, maxlength=args.maxlen, nthreads=args.threads))
+                    SeqIO.write(all_chunks, file_out, "fasta")
+                else:
+                    chromosomes.append(chrom)
+                    all_chunks += chunk_fast(record, num_reads_to_sample[
                                          num_record], vcf_in, chrom, specie, unif=args.unif, deaminate=args.deaminate, len_distrib=args.length, minlength=args.minlen, maxlength=args.maxlen, nthreads=args.threads)
 
             if num_record % 100 == 99:  # show progress
@@ -340,13 +347,13 @@ def main():
         if args.vcf:
             vcf_in.close()
     print("Done\nWritting down records...", end="", file=sys.stderr)
-    if not args.shuffled:
-        if args.sorted:  # we will do a natural sort on the chromosomes
-            chromosomes.sort(key=lambda key: [int(text) if text.isdigit(
-            ) else text for text in re.split('([0-9]+)', key)])
-        all_chunks = sort_recs(all_chunks, chromosome_list=chromosomes)
-    else:
+    if args.shuffled:
         random.shuffle(all_chunks)
+
+    if args.sorted:  # we will do a natural sort on the chromosomes
+        chromosomes.sort(key=lambda key: [int(text) if text.isdigit(
+                        ) else text for text in re.split('([0-9]+)', key)])
+        all_chunks = sort_recs(all_chunks, chromosome_list=chromosomes)
     if args.outfile:
         with open(args.outfile, 'w') as file_out:
             SeqIO.write(all_chunks, file_out, "fasta")
