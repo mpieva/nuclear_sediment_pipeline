@@ -71,6 +71,12 @@ def get_map_pos(n_samples, map_file="/tmp/fred/map_track.bed.gz"):
     with open('/tmp/fred/human.fa', 'w') as file_out:
         SeqIO.write(record_it, file_out, "fasta")
 
+def get_chrom(refseq):
+    chrom = refseq.id  # in case of scaffold genome
+    if "|" in chrom:
+        chrom = chrom.split("|")[0]
+    return chrom
+    
 # sort the list of requences according to chromosome
 
 
@@ -327,7 +333,7 @@ def main():
                 continue
             chrom = p.search(record.description)
             if not chrom:
-                chrom = record.id  # in case of scaffold genome
+                chrom = get_chrom(record)  # in case of scaffold genome
             else:
                 chrom = chrom.group()[len('chromosome '):-1]
             if args.vcf or args.substitution_file:
