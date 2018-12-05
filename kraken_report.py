@@ -5,6 +5,7 @@ from Bio import SeqIO
 from pysam import AlignmentFile
 from collections import defaultdict
 import argparse
+from pathlib import Path
 import os
 import json
 import contextlib
@@ -27,11 +28,9 @@ parser.add_argument('--translate',  help='Output for "translate" (read -> lineag
 parser.add_argument('--extractFile',  help='File where to extract sequence from')
 parser.add_argument('--min_length', default=0, type=int, help='Minimum length filter')
 parser.add_argument('infile', metavar="kraken.output")
+parser.add_argument('--outdir', default="", help='Extracted reads directory')
 
 args = parser.parse_args()
-
-if args.clades: # handle providing multiple clades, comma separated
-    args.clades = set(args.clades.split(","))
 
 db_prefix = os.path.abspath(args.db)
 if args.rank and len(args.rank) > 1:
@@ -85,8 +84,8 @@ def load_taxonomy(db_prefix):
             name_map = json.load(name_map_file)
             rank_map = json.load(rank_map_file)
             child_lists = json.load(child_lists_file)
-        
-    return (name_map, rank_map, child_lists)
+    name_clade_map = {v: k for k, v in name_map.items()}
+    return (name_map, rank_map, child_lists, name_clade_map)
 
 def rank_code(rank):
     if rank == "species": return "S"
@@ -109,26 +108,27 @@ def get_taxonomy_str(taxid):
         taxid_string = ';'.join(nodes[::-1])
         known_taxonomy_strings[taxid] = taxid_string
     return taxid_string
+    
 
 @contextlib.contextmanager
 def ret_file(f):
     yield f
     
 def extract_fasta_from_id(fileout, id_list, seqfile):
-    num_seq_to_extract = len(id_list)
-    #with open(fileout+".fa", 'w') as fout:
-    with open(fileout+".fa", 'w') as fout, \
+    if seqfile.endswith('a') or seqfile.endswith('a.gz'):
+        file_type = "fasta"
+        file_suffix = '.fa'
+    elif seqfile.endswith('q') or seqfile.endswith('q.gz'):
+        file_type = "fastq"
+        file_suffix = '.fq'
+    with open(fileout+file_suffix, 'w') as fout, \
     gzip.open(seqfile, "rt") if seqfile.endswith("gz") else ret_file(seqfile) as seqfile:
-        for rec in SeqIO.parse(seqfile, 'fasta'):
-            if rec.id in id_list: # as set is more efficient than a list
-                #see https://wiki.python.org/moin/TimeComplexity
-                num_seq_to_extract -= 1
-                if len(rec) >= args.min_length:
-                    SeqIO.write(rec, fout,  'fasta')
-                if num_seq_to_extract == 0:
-                    break
-        if num_seq_to_extract > 0:
-            print ( "Warning, EOF reached but", num_seq_to_extract, "sequences remained, is extractFile the original source?", file=sys.stderr)
+        # working with a generator expression, may be better memory-wise
+        input_seq_iterator = SeqIO.parse(seqfile, file_type)
+        fasta_seq_iterator = (rec for rec in input_seq_iterator if rec.id in id_list and len(rec) >= args.min_length)
+        count = SeqIO.write(fasta_seq_iterator, fout, file_type)
+    if len(id_list) != count: # sanity check you may want to extract from a demultiplexed file
+        print("Warning, EOF reached but", len(id_list) - count, "sequences remained, is extractFile the original source?", file=sys.stderr)
 
 def extract_bam_from_id(fileout, id_list, seqfile):
     num_seq_to_extract = len(id_list)
@@ -141,13 +141,13 @@ def extract_bam_from_id(fileout, id_list, seqfile):
                     num_seq_to_extract -= 1
                 elif read.is_read2: # decrease counter only if we see the second read of our pair
                     num_seq_to_extract -= 1
-                if read.infer_read_length() >= args.min_length:
+                if read.query_length >= args.min_length:
                     fout.write(read)
                 if not num_seq_to_extract:
                     break
 
 def extract_seq_from_id(fileout, id_list, seqfile, data_type='bam'):
-    if seqfile.endswith("fasta") or seqfile.endswith("fa") or seqfile.endswith("fas") or seqfile.endswith("gz"):
+    if seqfile.endswith("fasta") or seqfile.endswith("fa") or seqfile.endswith("fas") or seqfile.endswith("fq") or seqfile.endswith("fastq") or seqfile.endswith("gz"):
         data_type = 'fasta'
     if data_type == 'fasta': extract_fasta_from_id(fileout, id_list, seqfile)
     elif data_type == 'bam': extract_bam_from_id(fileout, id_list, seqfile)
@@ -162,7 +162,7 @@ def dfs_report (node, depth, related=[]):
     #filter on min percent
     #filter on rank
     if (not args.rank or args.rank == rank_code(rank)) and (c_counts >= args.min and c_counts_percent >= args.minp):
-        if node not in related:
+        if node not in related: # TODO not in excluded, implement an 'excluded' switch
             print ("{:6.2f}\t{}\t{}\t{}\t{}\t{}{}".format(
                 c_counts_percent,
                 c_counts,
@@ -182,23 +182,26 @@ def dfs_report (node, depth, related=[]):
             dfs_report(child, depth)
     # we want to extract up to a certain clade from a certain rank,
     # if there is a min sequences to extract, and only if a ref file is provided
-    if args.extractFile:
+    if args.extractFile:   
+        outdir = Path(args.outdir) 
+        if not outdir.exists():
+            outdir.mkdir(parents=True)
         if t_counts:# add only if the node has sequences assigned to it
             # a set is more efficient than a list: see https://wiki.python.org/moin/TimeComplexity
             extract_ids = extract_ids.union(seq_ids[node])
         if (node in args.clades or rank_code(rank) == args.rank) and \
             (c_counts_percent >= args.minp and len(extract_ids) >= args.min):
             print ("Extracting",len(extract_ids),"sequences for",name_map[node], file=sys.stderr)
-            if "fa.kraken" in args.infile:
+            if "fa.kraken" in args.infile or "fq.kraken" in args.infile:
                 suffix_length = len("fa.kraken")
-            elif "fasta.kraken" in args.infile:
+            elif "fasta.kraken" in args.infile or "fastq.kraken" in args.infile:
                 suffix_length = len("fasta.kraken")
             elif "bam.kraken" in args.infile:
                 suffix_length = len("bam.kraken")
             else:
                 suffix_length = len("kraken")
             # the names contains whitespaces
-            extract_seq_from_id(os.path.basename(args.infile)[:-suffix_length]+name_map[node].replace(' ','_'), \
+            extract_seq_from_id(str(outdir / Path(args.infile).name[:-suffix_length])+name_map[node].replace(' ','_'), \
                                 extract_ids, args.extractFile)
             extract_ids = set()
 
@@ -209,14 +212,25 @@ def dfs_summation(node):
             dfs_summation(child)
             clade_counts[node] += clade_counts.get(child, 0)
 
-name_map, rank_map, child_lists = load_taxonomy(db_prefix)
-parent_map = {}
+name_map, rank_map, child_lists, node_name_map = load_taxonomy(db_prefix)
 known_taxonomy_strings = {}
 if args.translate:
     with open(db_prefix+"/taxonomy/parent_map.json",'r') as parent_map_file:
         parent_map = json.load(parent_map_file)
 
 print("Map files loaded", file=sys.stderr)
+
+if args.clades: # handle providing multiple clades, comma separated
+    args.clades = args.clades.split(",")
+    for idx, clade in enumerate(args.clades): # translate taxa names to number
+        if not clade in name_map:
+            try:            
+                args.clades[idx] = node_name_map[clade.replace("_"," ")]
+            except KeyError:
+                print("Specified taxa {} not found, exiting", file=sys.stderr)
+                exit(1)
+
+    args.clades = set(args.clades)
 
 seq_count = 0 # init the number of sequences
 taxo_counts = defaultdict(int) # every new entry will be initialized to 0
