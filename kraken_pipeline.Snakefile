@@ -49,7 +49,7 @@ rule remove_duplicate:
         stats="pseudouniq/{libID}.pseudouniq_stats.txt"
     threads: 1
     script:
-        "~frederic_romagne/sediment_shotgun/bam-rmdup.py"
+        "bam-rmdup.py"
 
 rule merge_pseudouniq_stats:
     input:
