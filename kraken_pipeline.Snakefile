@@ -43,7 +43,7 @@ rule demultiplex:
 
 rule remove_duplicate:
     input:        
-        "split/{libID}.bam"
+        bam="split/{libID}.bam"
     output:
         bam="pseudouniq/{libID}.noPCRdups.bam",
         stats="pseudouniq/{libID}.pseudouniq_stats.txt"
