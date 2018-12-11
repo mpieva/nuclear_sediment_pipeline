@@ -21,7 +21,7 @@ localrules: all, demultiplex, remove_duplicate, kraken
 
 rule all:
     input:
-        dynamic("{libID}.kraken.report"),#,zip,libID=['SP3593','SP3595'],'pseudouniq/pseudouniq_stats.txt' family_name=['Primates','Bovidae']))
+        dynamic("{libID}.kraken.done"),#,zip,libID=['SP3593','SP3595'],'pseudouniq/pseudouniq_stats.txt' family_name=['Primates','Bovidae']))
         #'pseudouniq/pseudouniq_stats.txt'
 #        dynamic("out/kraken/{family_name}/aligned/{libID}.bam"),
 #        dynamic('split/{libID}.bam'),
@@ -85,33 +85,29 @@ rule most_clade:
     input:
         '{libID}.kraken'      
     output:
-        temp("most_clades.{libID}.txt")
+        #most_clades=temp("most_clades.{libID}.txt"),
+        report='{libID}.kraken.report'
     group: 'kraken'
     threads: 1
     shell:
-        # use all the families where species are available from RefSeq except Hominidae (9604)
-        # as we extract Primates automatically
         'python3 ~frederic_romagne/sediment_shotgun/kraken_report.py \
-        --db /mnt/sequencedb/Refseq/refseqReleaseKraken --rank F \
-        --clades 9431,9265,9359,9527,9277,9363,9709,9608,28735,9389,9775,9972,9895,30615,9681,10139,10066,337677,9765,9803,337664,9369,9835,10015,9376,9976,9655,9373,9726,30599,9256,9850,9979,9398,9498,55153,376918,119500,9632,38624,9415,9747,9816,9705,9821,30648,9788,186994,9393,9475,9780,40297,58055,10167,10158,29132,9577,9740,10150,30657,9750\
-        {input} | sort -rg -k2,2 | head -n 5| cut -f5 > {output}'
+        --db /mnt/sequencedb/Refseq/refseqReleaseKraken {input} > {output.report}'
         
 rule kraken_report:
     input:
         bamfile='pseudouniq/{libID}.noPCRdups.bam',
         kraken='{libID}.kraken',
-        most_clades="most_clades.{libID}.txt"
+        most_clades='{libID}.kraken.report'
     threads: 1
     group: 'kraken'
     params:
         outdir='out/kraken'      
     output:
-        #done='out/kraken/{libID}.assigned.done',
-        #outdir=directory('out/kraken'),
-        report='{libID}.kraken.report'
-    shell:
-        'python3 ~frederic_romagne/sediment_shotgun/kraken_report.py --db /mnt/sequencedb/Refseq/refseqReleaseKraken --clades $(tr "\\n" , < {input.most_clades})9443 --extractFile {input.bamfile} --outdir {params.outdir} {input.kraken} > {output.report}'
-        #        {wildcards.libID}.kraken.report'
+        report=temp('{libID}.kraken.done')
+    shell:        
+        # use all the families where species are available from RefSeq except Hominidae (9604) 
+        # as we extract Primates automatically and and Orycteropodidae (9816) as we cannot map to genome (too big!)
+        'python3 ~frederic_romagne/sediment_shotgun/kraken_report.py --db /mnt/sequencedb/Refseq/refseqReleaseKraken --clade $(grep "\sF\s" SP6024.kraken.report| sort -rg -k2,2 | grep -f /mnt/sediments/fred/refseq_family_list.txt | head -n5 | cut -f5 | tr "\n" ,)9443 --extractFile {input.bamfile} --outdir {params.outdir} {input.kraken} > {output.report}'
 
 
 onsuccess:
