@@ -7,8 +7,14 @@
 #import random
 #def get_specie_id_name (family_name):
 #    return random.choice(specie_id[family_name])
+# remove_duplicate query_length = 35
+
+rm_dup_query_len = config["rm_dup_query_len"] \
+if "rm_dup_query_len" in config else 35
+num_min_dup = int(config["num_min_dup"]) if "num_min_dup" in config else 2
+
     
-localrules: all, demultiplex, kraken 
+localrules: all, demultiplex, remove_duplicate, kraken 
 #ruleorder:  kraken_report > bwa_map
 
 
@@ -42,58 +48,8 @@ rule remove_duplicate:
         bam="pseudouniq/{libID}.noPCRdups.bam",
         stats="pseudouniq/{libID}.pseudouniq_stats.txt"
     threads: 1
-    run:
-        # run rmdup adapted in python
-        from pysam import AlignmentFile
-        from Bio.Seq import Seq
-        from collections import ordereddict, defaultdict
-        with open(output.stats,'w') as stats:            
-#            print ("#file","all_seqs","seqs>="+str(rm_dup_query_len), \
-#            "avrg_times_seen_L>="+str(rm_dup_query_len), \
-#             "final_noPCRdups_seqs", "avrg_times_seen_final", sep="\t", file=stats) #header
-            for readfile,writefile in zip (input, [output.bam]):
-                samfile = AlignmentFile(readfile, "rb")
-                
-                #using template=samfile to copy the header
-                with AlignmentFile(writefile, "wb", template=samfile) as bamout:
-                    duplicate = defaultdict(int)
-                    length_passed = 0
-                    passed = 0
-                    
-                    for allreads, aln in enumerate(samfile.fetch(until_eof=True), 1):
-                        #allreads += 1
-                        # flag 5 is bit 1 and 4 (-F up)
-                        if((not (aln.flag & 5)) and (aln.query_length >= rm_dup_query_len)): #35
-                            length_passed += 1
-                            if aln.is_reverse: # if the read is reverse
-                                # the sequence has to be revcomp'ed'
-                                seq = Seq(aln.query_sequence).reverse_complement()#create a sequence object
-                            else:
-                                seq = aln.query_sequence
-                                duplicate[seq] += 1
-                            #keep only reads apearing at least twice
-						    #twice by defaul, now can be assigned through command line
-						    # we want the sequence to be printed only once it reaches the min
-						    #number of duplicates
-                            if duplicate[seq] == num_min_dup:
-                                passed += 1
-                                bamout.write(aln)
-
-                samfile.close()       
-                #write stats
-                dups_average = [v for v in duplicate.values() if (v>=num_min_dup)]
-                all_average = [v for v in duplicate.values()]
-                #avoid division by 0
-                if len(all_average):
-                    rounded_avrg_all = "{:.1f}".format(sum(all_average)/len(all_average))
-                else:
-                    rounded_avrg_all = "0"
-                if len(dups_average):
-                    rounded_avrg_final =" {:.1f}".format(sum(dups_average)/len(dups_average))
-                else:
-                    rounded_avrg_final = "0"
-                print (wildcards["sample"], allreads, length_passed, rounded_avrg_all,\
-                 passed, rounded_avrg_final, sep="\t", file=stats) #print out the stats
+    script:
+        "~frederic_romagne/sediment_shotgun/bam-rmdup.py"
 
 rule merge_pseudouniq_stats:
     input:
@@ -123,7 +79,7 @@ rule kraken:
         '{libID}.kraken'
     threads: 15
     shell: # run kraken on 15 threads in order to parallelize it.
-        '/home/frederic_romagne/kraken/install/kraken --threads {threads} --db /mnt/ramdisk/refseqReleaseKraken --only-classified-output --output {output} {input}'
+        '/home/frederic_romagne/kraken/install/kraken --threads {threads} --db /mnt/ramdisk/refseqReleaseKraken --only-classified-output --output {output} {input} 2>{output}.stats'
 
 rule most_clade:
     input:
@@ -136,11 +92,8 @@ rule most_clade:
         # use all the families where species are available from RefSeq except Hominidae (9604)
         # as we extract Primates automatically
         'python3 ~frederic_romagne/sediment_shotgun/kraken_report.py \
-        --db /mnt/sequencedb/Refseq/refseqReleaseKraken --rank F --clades \
-        9431,9265,9359,9527,9277,9363,9709,9608,28735,9389,9775,9972,9895,30615,9681,\
-        10139,10066,337677,9765,9803,337664,9369,9835,10015,9376,9976,9655,9373,9726,30599,9256,\
-        9850,9979,9398,9498,55153,376918,119500,9632,38624,9415,9747,9816,9705,9821,30648,\
-        9788,186994,9393,9475,9780,40297,58055,10167,10158,29132,9577,9740,10150,30657,9750 \
+        --db /mnt/sequencedb/Refseq/refseqReleaseKraken --rank F \
+        --clades 9431,9265,9359,9527,9277,9363,9709,9608,28735,9389,9775,9972,9895,30615,9681,10139,10066,337677,9765,9803,337664,9369,9835,10015,9376,9976,9655,9373,9726,30599,9256,9850,9979,9398,9498,55153,376918,119500,9632,38624,9415,9747,9816,9705,9821,30648,9788,186994,9393,9475,9780,40297,58055,10167,10158,29132,9577,9740,10150,30657,9750\
         {input} | sort -rg -k2,2 | head -n 5| cut -f5 > {output}'
         
 rule kraken_report:
@@ -157,7 +110,7 @@ rule kraken_report:
         #outdir=directory('out/kraken'),
         report='{libID}.kraken.report'
     shell:
-        'python3 ~frederic_romagne/sediment_shotgun/kraken_report.py --db /mnt/sequencedb/Refseq/refseqReleaseKraken --clades $(tr "\n" , < {input.most_clades})9443 --extractFile {input.bamfile} --out"dir {params.outdir} {input.kraken} > {output.report}'
+        'python3 ~frederic_romagne/sediment_shotgun/kraken_report.py --db /mnt/sequencedb/Refseq/refseqReleaseKraken --clades $(tr "\\n" , < {input.most_clades})9443 --extractFile {input.bamfile} --outdir {params.outdir} {input.kraken} > {output.report}'
         #        {wildcards.libID}.kraken.report'
 
 
