@@ -1,3 +1,11 @@
+"""Set of functions used to generate reads derived from a set of sequences (i.e. full genome FASTA file).
+
+* You can specify a mutation rate, a VCF file in order to add known SNPs, or a mutation matrix obtained from SNPad.
+* You can specify a length distribution file otherwise reads length will be uniformly sampled.
+* Works is processed in parallel in order to decrease computation time.
+
+"""
+
 import gzip
 from Bio import SeqIO, SeqRecord
 from Bio.Seq import Seq
@@ -18,10 +26,17 @@ import contextlib
 
 # tabl['A'].loc[30][tabl['A'].loc[30]>=0.0003].idxmin()
 
-random.seed()
-
-
 def get_sequence_with_substitution(sequence):
+    """Generate a sequence with mutations relative to the given mutation probability matrix
+    
+    Parameters
+    ----------
+    sequence : Bio.Seq.MutableSeq
+    
+    Returns
+    -------
+    Bio.Seq.Seq
+    """
     read_length = len(sequence)
     # create a set of draws
     choices = np.random.random(read_length)
@@ -43,7 +58,7 @@ def get_sequence_with_substitution(sequence):
 # specific code to work with mappability track...
 
 
-def get_map_pos(n_samples, map_file="/tmp/fred/map_track.bed.gz"):
+def _get_map_pos(n_samples, map_file="/tmp/fred/map_track.bed.gz"):
     with pysam.TabixFile(map_file, parser=pysam.asBed()) as tbx:
         reads = random.sample([row for row in tbx.fetch() if (
             int(row[2]) - int(row[1]) < 100) and (int(row[2]) - int(row[1]) > 35)], n_samples)
@@ -68,6 +83,18 @@ def get_map_pos(n_samples, map_file="/tmp/fred/map_track.bed.gz"):
 
 
 def get_chrom(refseq):
+    """Get the chromosome from a RefSeq entry.
+    
+    Parameters
+    ----------
+    refseq : Bio.Seq.Seq
+        A RefSeq entry
+    
+    Returns
+    -------
+    str
+        The chromosome extracted from the sequence id
+    """
     chrom = refseq.id  # in case of scaffold genome
     if "|" in chrom:
         chrom = chrom.split("|")[0]
@@ -77,11 +104,27 @@ def get_chrom(refseq):
 
 
 def sort_recs(recs, chromosome_list=[], split_char="|"):
+    """Sort a list of Bio.SeqRecord according to the chromosome, position, length.
+    
+    Parameters
+    ----------
+    recs : list of Bio.SeqRecord
+    chromosome_list : list of str
+        A list specifying the order of the chromosomes (as python doesn't really natural sort lists)
+    split_char : str
+        The delimiter used for splitting the record.id
+    
+    Returns
+    -------
+    list of Bio.SeqRecord
+        Records properly sorted
+    """
     def sort_func(item):
-        # we sort according to chromosomes
-        # our header is >16|kraken:taxid|9906|69694935_57 ...
-        # use split to access the first element
-        # last element is pos_length
+        """we sort according to chromosomes
+         our header is >16|kraken:taxid|9906|69694935_57 ...
+         use split to access the first element
+         last element is pos_length
+        """
         chrom = item.id.split(split_char)[0]
         pos, l = item.id.split(split_char)[-1].split("_")
         if chromosome_list:
@@ -92,6 +135,19 @@ def sort_recs(recs, chromosome_list=[], split_char="|"):
 
 
 def simulate_deamination(sequence, nbases=3):
+    """Add C -> T mutations to 5' and 3' ends
+    
+    Parameters
+    ----------
+    sequence : Bio.Seq.MutableSeq
+    nbases : int
+        Number of bases to mutate for both ends
+        
+    Returns
+    -------
+    Bio.Seq.Seq
+        The deaminated sequence
+    """
     while "C" in sequence[:nbases]:  # 5' C to T
         sequence[sequence.index("C")] = "T"
     while "C" in sequence[-nbases:]:  # 3' C to T
@@ -100,6 +156,19 @@ def simulate_deamination(sequence, nbases=3):
 
 
 def mutate_unif(sequence, unif):
+    """Add mutations uniformely throughout the sequence
+    
+    Parameters
+    ----------
+    sequence: Bio.Seq.Seq
+    unif: float
+        The mutaion rate
+
+    Returns
+    -------
+    Bio.Seq.Seq
+        A new mutated sequence
+    """
     same_nuc = set("ACGT")
     read_length = len(sequence)
     # we will mutate a base only if our sample is < unif
@@ -115,6 +184,32 @@ def mutate_unif(sequence, unif):
 # sample 0:length_genome (N = #chunks desired)
 # sample N sizes (N = chunks desired)
 def chunk_fast(record, n_samples, vcf_in=None, chrom=None, specie="|", individual=0, unif=False, len_distrib=False, deaminate=0, minlength=35, maxlength=100, nthreads=4):
+    """Split the sequence into chunks and add mutations (in parallel)
+    
+    The function will generate a list of positions to extract reads from as well as a list of read length (following the given distribution), it will then create a list of reads which will be mutated according to the mutation rule given (unif, VCF, or matrix)
+    
+    Parameters
+    ----------
+    record: Bio.SeqRecord
+    n_samples: int
+        How many reads should be sampled
+    vcf_in: pysam.VariantFile, optional
+        File providing mutations informations (VCF or Substitution matrix)
+    chrom: int, optional
+    specie: str, optional
+    individual: int, optional
+    unif: float, optional
+        The mutaion rate, will be added on top of VCF/substitution Matrix 
+    len_distrib: str, optional
+    deaminate: int, optional
+    minlength: int, optional
+    maxlength: int, optional
+    nthreads: int, optional
+    
+    Returns
+    -------
+    list of Bio.Seq.Seq
+    """
     try:
         positions = random.sample(range(0, len(record)-minlength), n_samples)
     except:
@@ -186,6 +281,22 @@ def chunk_fast(record, n_samples, vcf_in=None, chrom=None, specie="|", individua
 
 
 def read_len_distrib(filename, minlen=35, maxlen=100):
+    """Reads a tsv file with counts of read per length
+    
+    Parameters
+    ----------
+    filename : str
+        tsv file containing the read length count
+    minlen : int
+        minimum length for the distribution
+    maxlen : int
+        maximum length for the distribution
+        
+    Returns
+    -------
+    list of float
+        The computed proportion of each read length
+    """
     from csv import reader
     with open(filename, 'r', newline='') as csvfile:
         csvreader = reader(csvfile, delimiter='\t')
@@ -200,6 +311,22 @@ def read_len_distrib(filename, minlen=35, maxlen=100):
 
 
 def estimate_read_distribution(file_in, num_seq, n_chromosomes=None):
+    """Reads a fasta file and computes the number of sequences to extract per chromosome (relative to chromosome length)
+    
+    Parameters
+    ----------
+    file_in : str
+        FASTA file you want to estimate the distribution from.
+    num_seq : int
+        The total number of sequences you want to sample.
+    n_chromosomes : int
+        If you want to take only the first *n* chromosomes of your dataset.
+    
+    Returns
+    -------
+    list of int
+        The number of sequences to extract per chromosome.
+    """
     try:
         with pysam.FastaFile(file_in) as fa:
             print("The file contains", fa.nreferences,
@@ -238,11 +365,36 @@ def estimate_read_distribution(file_in, num_seq, n_chromosomes=None):
 
 # dummy function used for opening a file non-gzipped
 @contextlib.contextmanager
-def ret_file(f):
+def _ret_file(f):
     yield f
 
+def read_mutation_matrix(file_in):
+    """Create a table from a mutation matrix provided by SNPad
+    
+    Returns
+    -------
+    tbl : Pandas.table
+        A table containing the mutation probability for base at each position of a read.
+    sn : list of dict
+        The list contains the highest probability for which we can have a mutation on a given position.
+        Used to optimize the computation when we draw for a mutation.
+    """
+    t = pd.read_table(file_in, sep="\t",
+                      header=None, names=["profile", "from", "to", "prob"])
+    tabl = pd.pivot_table(t, values='prob', index=[
+                          'profile', 'to'], columns=['from'], aggfunc=np.sum)
+    # contains, for each nc, the highest probability for which we can have
+    # a mutation
+    # e.g.
+    # 'A': 0.00797800000000004, -> ~0.79% chances to have a mutation, any sampled number above this would result in keeping the nc
+    # this allows us to optimize the algorithm by not using the lookup
+    # table and directly keep the nc.
+    sn = [{nc: prob for nc, prob in zip(tabl.columns,
+                                                  [tabl[x][pos][x] for x in tabl])} for pos in range(31)]
+    return tbl, sn
 
-def main():
+def _main():
+    random.seed()
     # Process command line
     parser = argparse.ArgumentParser(description='Split a genome into chuncks')
     parser.add_argument('--num_seq', default=0, type=int,
@@ -287,19 +439,8 @@ def main():
 
     if args.substitution_file:
         global tabl
-        t = pd.read_table(args.substitution_file, sep="\t",
-                          header=None, names=["profile", "from", "to", "prob"])
-        tabl = pd.pivot_table(t, values='prob', index=[
-                              'profile', 'to'], columns=['from'], aggfunc=np.sum)
-        # contains, for each nc, the highest probability for which we can have
-        # a mutation
         global same_nuc
-        # e.g.
-        # 'A': 0.00797800000000004, -> ~0.79% chances to have a mutation, any sampled number above this would result in keeping the nc
-        # this allows us to optimize the algorithm by not using the lookup
-        # table and directly keep the nc.
-        same_nuc = [{nc: prob for nc, prob in zip(tabl.columns,
-                                                  [tabl[x][pos][x] for x in tabl])} for pos in range(31)]
+        tabl, same_nuc = read_mutation_matrix(args.substitution_file)
         for nc in 'ACGT':
             for pos in range(31):
                 # do cumsum on sorted values, assuming that the highest proba is the nc itself: C->C, A->A, etc
@@ -310,7 +451,7 @@ def main():
     specie = "|"
     if args.specie:
         specie += args.specie.replace(' ', "_")+"|"
-    with gzip.open(args.file_in, "rt") if args.file_in.endswith("gz") else ret_file(args.file_in) as file_in, open(args.outfile, 'w') if args.outfile else sys.stdout as file_out:
+    with gzip.open(args.file_in, "rt") if args.file_in.endswith("gz") else _ret_file(args.file_in) as file_in, open(args.outfile, 'w') if args.outfile else sys.stdout as file_out:
         all_chunks = []
         vcf_in = args.substitution_file  # will be none if we use a VCF file
         chromosomes = []
@@ -366,4 +507,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    _main()
