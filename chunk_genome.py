@@ -24,7 +24,7 @@ import contextlib
 # 30,000,000 with 99% bacteria => 99% bacteria, 0.5% hyena, 0.3% cow, 0.15% pig, 0.04% mammoth, 0.01% Human
 # 0.5 -> 95912 0.3% -> 9913, 0.15% -> 9823, 0.04 -> 9785 0.01,  -> 9606
 
-# tabl['A'].loc[30][tabl['A'].loc[30]>=0.0003].idxmin()
+# tbl['A'].loc[30][tbl['A'].loc[30]>=0.0003].idxmin()
 
 def get_sequence_with_substitution(sequence):
     """Generate a sequence with mutations relative to the given mutation probability matrix
@@ -48,7 +48,7 @@ def get_sequence_with_substitution(sequence):
     for idx, (nc, (choice, pos)) in enumerate(zip(sequence, zip(choices, positions))):
         # we draw a probability which allows us to mutate
         if choice > same_nuc[pos][nc]:
-            t = tabl[nc].loc[pos]
+            t = tbl[nc].loc[pos]
             try:
                 newSeq[idx] = t[choice < t].idxmin()
             except:  # rounding error when over choice 0.999999
@@ -381,7 +381,7 @@ def read_mutation_matrix(file_in):
     """
     t = pd.read_table(file_in, sep="\t",
                       header=None, names=["profile", "from", "to", "prob"])
-    tabl = pd.pivot_table(t, values='prob', index=[
+    tbl = pd.pivot_table(t, values='prob', index=[
                           'profile', 'to'], columns=['from'], aggfunc=np.sum)
     # contains, for each nc, the highest probability for which we can have
     # a mutation
@@ -389,8 +389,8 @@ def read_mutation_matrix(file_in):
     # 'A': 0.00797800000000004, -> ~0.79% chances to have a mutation, any sampled number above this would result in keeping the nc
     # this allows us to optimize the algorithm by not using the lookup
     # table and directly keep the nc.
-    sn = [{nc: prob for nc, prob in zip(tabl.columns,
-                                                  [tabl[x][pos][x] for x in tabl])} for pos in range(31)]
+    sn = [{nc: prob for nc, prob in zip(tbl.columns,
+                                                  [tbl[x][pos][x] for x in tbl])} for pos in range(31)]
     return tbl, sn
 
 def _main():
@@ -438,14 +438,14 @@ def _main():
     print("Loading dataset...", end="", file=sys.stderr)
 
     if args.substitution_file:
-        global tabl
+        global tbl
         global same_nuc
-        tabl, same_nuc = read_mutation_matrix(args.substitution_file)
+        tbl, same_nuc = read_mutation_matrix(args.substitution_file)
         for nc in 'ACGT':
             for pos in range(31):
                 # do cumsum on sorted values, assuming that the highest proba is the nc itself: C->C, A->A, etc
-                tabl[nc][pos] = [tabl[nc][pos].sort_values(ascending=False).cumsum()[
-                    to] for to in tabl.columns]
+                tbl[nc][pos] = [tbl[nc][pos].sort_values(ascending=False).cumsum()[
+                    to] for to in tbl.columns]
     num_reads_to_sample = estimate_read_distribution(
         args.file_in, args.num_seq, args.chromosomes)
     specie = "|"
