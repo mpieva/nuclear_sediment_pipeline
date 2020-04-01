@@ -474,9 +474,9 @@ def _main():
                 continue
             chrom = p.search(record.description)
             if not chrom:
-                chrom = get_chrom(record)  # in case of scaffold genome
-            else:
-                chrom = chrom.group()[len('chromosome '):-1]
+                chrom = (get_chrom(record), get_chrom(record))  # in case of scaffold genome
+            else: # save both the id and chromosome info from fasta description
+                chrom = (get_chrom(record), chrom.group()[len('chromosome '):-1])
             if args.vcf or args.substitution_file:
                 # we write chromosomes in the same order as the given input.
                 if not args.shuffled and not args.sorted:
@@ -498,9 +498,11 @@ def _main():
         if args.shuffled:
             random.shuffle(all_chunks)
         if args.sorted:  # we will do a natural sort on the chromosomes
+            # if we find a chromosome in the description part of the header
+            # use it for sorting, otherwise sort with fasta id
             chromosomes.sort(key=lambda key: [int(text) if text.isdigit(
-            ) else text for text in re.split('([0-9]+)', key)])
-            all_chunks = sort_recs(all_chunks, chromosome_list=chromosomes)
+            ) else text for text in re.split(r'([0-9]+)', key[1])])
+            all_chunks = sort_recs(all_chunks, chromosome_list=[c[0] for c in chromosomes])
         if args.shuffled or args.sorted:
             SeqIO.write(all_chunks, file_out, "fasta")
     print("Done", file=sys.stderr)
