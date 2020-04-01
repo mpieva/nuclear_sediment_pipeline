@@ -461,7 +461,7 @@ def _main():
             vcf_in.subset_samples([vcf_in.header.samples[args.individual]])
             # our chromosome can contain up to 3 characters (most likely 2 max:
             # e.g. chromosome 21,)
-        p = re.compile("chromosome \w{1,3},", re.IGNORECASE)
+        p = re.compile(r"chromosome \w{1,3},", re.IGNORECASE)
         for num_record, record in enumerate(SeqIO.parse(file_in, "fasta")):
             # we want reads only to assigned chromosomes
             if args.chromosomes:
@@ -494,7 +494,7 @@ def _main():
                       end="\r", file=sys.stderr)
         if args.vcf:
             vcf_in.close()
-        print("Done\nWritting down records...", end="", file=sys.stderr)
+        print("\nDone\nWritting down records...", end="", file=sys.stderr)
         if args.shuffled:
             random.shuffle(all_chunks)
         if args.sorted:  # we will do a natural sort on the chromosomes
