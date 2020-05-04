@@ -477,17 +477,16 @@ def _main():
                 chrom = (get_chrom(record), get_chrom(record))  # in case of scaffold genome
             else: # save both the id and chromosome info from fasta description
                 chrom = (get_chrom(record), chrom.group()[len('chromosome '):-1])
-            if args.vcf or args.substitution_file:
-                # we write chromosomes in the same order as the given input.
-                if not args.shuffled and not args.sorted:
-                    all_chunks = sort_recs(chunk_fast(record, num_reads_to_sample[
-                        num_record], vcf_in, chrom, specie, unif=args.unif, deaminate=args.deaminate, len_distrib=args.length,
-                        minlength=args.minlen, maxlength=args.maxlen, nthreads=args.threads))
-                    SeqIO.write(all_chunks, file_out, "fasta")
-                else:
-                    chromosomes.append(chrom)
-                    all_chunks += chunk_fast(record, num_reads_to_sample[
-                        num_record], vcf_in, chrom, specie, unif=args.unif, deaminate=args.deaminate, len_distrib=args.length, minlength=args.minlen, maxlength=args.maxlen, nthreads=args.threads)
+            # we write chromosomes in the same order as the given input.
+            if not args.shuffled and not args.sorted:
+                all_chunks = sort_recs(chunk_fast(record, num_reads_to_sample[
+                    num_record], vcf_in, chrom, specie, unif=args.unif, deaminate=args.deaminate, len_distrib=args.length,
+                    minlength=args.minlen, maxlength=args.maxlen, nthreads=args.threads))
+                SeqIO.write(all_chunks, file_out, "fasta")
+            else:
+                chromosomes.append(chrom)
+                all_chunks += chunk_fast(record, num_reads_to_sample[
+                    num_record], vcf_in, chrom, specie, unif=args.unif, deaminate=args.deaminate, len_distrib=args.length, minlength=args.minlen, maxlength=args.maxlen, nthreads=args.threads)
 
             if num_record % 100 == 99:  # show progress
                 print(num_record + 1, "sequences parsed...",
