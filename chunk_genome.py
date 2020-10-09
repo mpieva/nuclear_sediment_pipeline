@@ -21,10 +21,6 @@ import re
 import argparse
 import contextlib
 
-# 30,000,000 with 99% bacteria => 99% bacteria, 0.5% hyena, 0.3% cow, 0.15% pig, 0.04% mammoth, 0.01% Human
-# 0.5 -> 95912 0.3% -> 9913, 0.15% -> 9823, 0.04 -> 9785 0.01,  -> 9606
-
-# tbl['A'].loc[30][tbl['A'].loc[30]>=0.0003].idxmin()
 
 def get_sequence_with_substitution(sequence):
     """Generate a sequence with mutations relative to the given mutation probability matrix
@@ -54,32 +50,6 @@ def get_sequence_with_substitution(sequence):
             except:  # rounding error when over choice 0.999999
                 newSeq[idx] = t.idxmax()
     return Seq(''.join(newSeq))
-
-# specific code to work with mappability track...
-
-
-def _get_map_pos(n_samples, map_file="/tmp/fred/map_track.bed.gz"):
-    with pysam.TabixFile(map_file, parser=pysam.asBed()) as tbx:
-        reads = random.sample([row for row in tbx.fetch() if (
-            int(row[2]) - int(row[1]) < 100) and (int(row[2]) - int(row[1]) > 35)], n_samples)
-    list_records = SeqIO.parse(
-        '/mnt/solexa/Genomes/hg19_1000g/whole_genome.fa', "fasta")
-    chromosomes = 24  # 22 + X + Y
-    all_chunks = []
-    for num_record, record in enumerate(list_records, 1):
-        if num_record > chromosomes:
-            break
-        chrom = record.id
-        chrom_sample = [row for row in reads if row[0] == chrom]
-        print(chrom, len(chrom_sample), file=sys.stderr)
-        for pos in chrom_sample:
-            sample = record[int(pos[1]):int(pos[2])]
-            all_chunks += [(sample, pos[1])]
-
-    record_it = (SeqRecord.SeqRecord(record.seq, id="{}|{}_{}|SGDP".format(record.id, pos, len(record)),
-                                     description=" ".join(record.description.split(' ')[1:])) for record, pos in all_chunks)
-    with open('/tmp/fred/human.fa', 'w') as file_out:
-        SeqIO.write(record_it, file_out, "fasta")
 
 
 def get_chrom(refseq):
