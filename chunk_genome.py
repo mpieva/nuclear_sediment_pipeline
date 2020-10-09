@@ -10,6 +10,7 @@ import gzip
 from Bio import SeqIO, SeqRecord
 from Bio.Seq import Seq
 import multiprocessing
+
 # for creating partial function for feeding pool.map
 from functools import partial
 import numpy as np
@@ -24,11 +25,11 @@ import contextlib
 
 def get_sequence_with_substitution(sequence):
     """Generate a sequence with mutations relative to the given mutation probability matrix
-    
+
     Parameters
     ----------
     sequence : Bio.Seq.MutableSeq
-    
+
     Returns
     -------
     Bio.Seq.Seq
@@ -49,17 +50,17 @@ def get_sequence_with_substitution(sequence):
                 newSeq[idx] = t[choice < t].idxmin()
             except:  # rounding error when over choice 0.999999
                 newSeq[idx] = t.idxmax()
-    return Seq(''.join(newSeq))
+    return Seq("".join(newSeq))
 
 
 def get_chrom(refseq):
     """Get the chromosome from a RefSeq entry.
-    
+
     Parameters
     ----------
     refseq : Bio.Seq.Seq
         A RefSeq entry
-    
+
     Returns
     -------
     str
@@ -70,12 +71,13 @@ def get_chrom(refseq):
         chrom = chrom.split("|")[0]
     return chrom
 
+
 # sort the list of requences according to chromosome
 
 
 def sort_recs(recs, chromosome_list=[], split_char="|"):
     """Sort a list of Bio.SeqRecord according to the chromosome, position, length.
-    
+
     Parameters
     ----------
     recs : list of Bio.SeqRecord
@@ -83,17 +85,18 @@ def sort_recs(recs, chromosome_list=[], split_char="|"):
         A list specifying the order of the chromosomes (as python doesn't really natural sort lists)
     split_char : str
         The delimiter used for splitting the record.id
-    
+
     Returns
     -------
     list of Bio.SeqRecord
         Records properly sorted
     """
+
     def sort_func(item):
         """we sort according to chromosomes
-         our header is >16|kraken:taxid|9906|69694935_57 ...
-         use split to access the first element
-         last element is pos_length
+        our header is >16|kraken:taxid|9906|69694935_57 ...
+        use split to access the first element
+        last element is pos_length
         """
         chrom = item.id.split(split_char)[0]
         pos, l = item.id.split(split_char)[-1].split("_")
@@ -101,18 +104,19 @@ def sort_recs(recs, chromosome_list=[], split_char="|"):
             return (chromosome_list.index(chrom), int(pos), int(l))
         else:
             return (int(pos), int(l))
+
     return sorted(recs, key=sort_func)
 
 
 def simulate_deamination(sequence, nbases=3):
     """Add C -> T mutations to 5' and 3' ends
-    
+
     Parameters
     ----------
     sequence : Bio.Seq.MutableSeq
     nbases : int
         Number of bases to mutate for both ends
-        
+
     Returns
     -------
     Bio.Seq.Seq
@@ -127,7 +131,7 @@ def simulate_deamination(sequence, nbases=3):
 
 def mutate_unif(sequence, unif):
     """Add mutations uniformely throughout the sequence
-    
+
     Parameters
     ----------
     sequence: Bio.Seq.Seq
@@ -142,22 +146,35 @@ def mutate_unif(sequence, unif):
     same_nuc = set("ACGT")
     read_length = len(sequence)
     # we will mutate a base only if our sample is < unif
-    choices, = np.where(np.random.random(read_length) < unif)
+    (choices,) = np.where(np.random.random(read_length) < unif)
     newSeq = list(sequence)
     for idx in choices:
         # we call tuple in order to do random.choice (and remove the current nc from the possibilities)
         newSeq[idx] = random.choice(tuple(same_nuc.difference(sequence[idx])))
-    return Seq(''.join(newSeq))
+    return Seq("".join(newSeq))
 
 
 # the idea is to generate a set of coordinates/size pairs and only take those substrings:
 # sample 0:length_genome (N = #chunks desired)
 # sample N sizes (N = chunks desired)
-def chunk_fast(record, n_samples, vcf_in=None, chrom=None, specie="|", individual=0, unif=False, len_distrib=False, deaminate=0, minlength=35, maxlength=100, nthreads=4):
+def chunk_fast(
+    record,
+    n_samples,
+    vcf_in=None,
+    chrom=None,
+    specie="|",
+    individual=0,
+    unif=False,
+    len_distrib=False,
+    deaminate=0,
+    minlength=35,
+    maxlength=100,
+    nthreads=4,
+):
     """Split the sequence into chunks and add mutations (in parallel)
-    
+
     The function will generate a list of positions to extract reads from as well as a list of read length (following the given distribution), it will then create a list of reads which will be mutated according to the mutation rule given (unif, VCF, or matrix)
-    
+
     Parameters
     ----------
     record: Bio.SeqRecord
@@ -169,50 +186,57 @@ def chunk_fast(record, n_samples, vcf_in=None, chrom=None, specie="|", individua
     specie: str, optional
     individual: int, optional
     unif: float, optional
-        The mutaion rate, will be added on top of VCF/substitution Matrix 
+        The mutaion rate, will be added on top of VCF/substitution Matrix
     len_distrib: str, optional
     deaminate: int, optional
     minlength: int, optional
     maxlength: int, optional
     nthreads: int, optional
-    
+
     Returns
     -------
     list of Bio.Seq.Seq
     """
     try:
-        positions = random.sample(range(0, len(record)-minlength), n_samples)
+        positions = random.sample(range(0, len(record) - minlength), n_samples)
     except:
-        print("sample too small {}bp, sampling {} reads with replacements".format(len(record) -
-                                                                                  minlength, n_samples), file=sys.stderr)
-        positions = [random.choice(range(0, len(record) - minlength))
-                     for _ in range(n_samples)]
+        print(
+            "sample too small {}bp, sampling {} reads with replacements".format(
+                len(record) - minlength, n_samples
+            ),
+            file=sys.stderr,
+        )
+        positions = [
+            random.choice(range(0, len(record) - minlength)) for _ in range(n_samples)
+        ]
     if len_distrib:  # we gave a file with distribution per length
         p = read_len_distrib(len_distrib, minlength, maxlength)
-        length = np.random.choice(
-            np.arange(minlength, maxlength+1), n_samples, p=p)
+        length = np.random.choice(np.arange(minlength, maxlength + 1), n_samples, p=p)
     else:
         # length = random.choices(range(minlength, maxlength), k = n_samples) #only from python3.6
         # onwards
-        length = np.random.choice(
-            np.arange(minlength, maxlength+1), n_samples)
+        length = np.random.choice(np.arange(minlength, maxlength + 1), n_samples)
     samples = []
     for pos, l in zip(positions, length):
-        rec = record[pos:pos + l]
-        while not set(rec).issubset('ACGT'):  # control for unknown bases
+        rec = record[pos : pos + l]
+        while not set(rec).issubset("ACGT"):  # control for unknown bases
             # print ("Unknown base (N) in read at {} {},
             # resampling...".format(pos,l), file=sys.stderr) # debug purpose
             pos = random.choice(range(0, len(record) - minlength))
             if len_distrib:
-                l = np.random.choice(
-                    np.arange(minlength, maxlength+1), 1, p=p)[0]
+                l = np.random.choice(np.arange(minlength, maxlength + 1), 1, p=p)[0]
             else:
-                l = random.choice(range(minlength, maxlength+1))
-            rec = record[pos:pos + l]
+                l = random.choice(range(minlength, maxlength + 1))
+            rec = record[pos : pos + l]
 
         # create a new header which includes the specie read pos, read length
-        samples += [SeqRecord.SeqRecord(rec.seq, id="{}{}{}_{}".format(rec.id, specie, pos, l),
-                                        description=" ".join(rec.description.split(' ')[1:]))]
+        samples += [
+            SeqRecord.SeqRecord(
+                rec.seq,
+                id="{}{}{}_{}".format(rec.id, specie, pos, l),
+                description=" ".join(rec.description.split(" ")[1:]),
+            )
+        ]
     if vcf_in:  # insert variation from VCF
         res = []
         if isinstance(vcf_in, pysam.VariantFile):  # we use a VCF
@@ -222,7 +246,7 @@ def chunk_fast(record, n_samples, vcf_in=None, chrom=None, specie="|", individua
                 for vcf_rec in vcf_in.fetch(chrom, start=pos, end=pos + l):
                     # Insert alt only if GT != 0/0, use the first individual by
                     # default
-                    if any(vcf_rec.samples[0]['GT']):
+                    if any(vcf_rec.samples[0]["GT"]):
                         if len(vcf_rec.alts[0]) == 1:  # only SNPs
                             sequence[vcf_rec.start - pos] = vcf_rec.alts[0]
                 if deaminate or unif:  # save the seqs for later deam/unif
@@ -234,13 +258,13 @@ def chunk_fast(record, n_samples, vcf_in=None, chrom=None, specie="|", individua
         else:  # we use a variation probability matrix
             # run on multithreaded code as it is the bottleneck (each base is possibly mutated)
             with multiprocessing.Pool(processes=nthreads) as pool:
-                res = pool.map(get_sequence_with_substitution, [
-                               s.seq.tomutable() for s in samples])
+                res = pool.map(
+                    get_sequence_with_substitution, [s.seq.tomutable() for s in samples]
+                )
         if len(res):  # run multi-threaded code
             with multiprocessing.Pool(processes=nthreads) as pool:
                 if deaminate:
-                    deam_func = partial(
-                        simulate_deamination, deaminate=deaminate)
+                    deam_func = partial(simulate_deamination, deaminate=deaminate)
                     res = pool.map(deam_func, res)
                 if unif:
                     unif_func = partial(mutate_unif, unif=unif)
@@ -252,7 +276,7 @@ def chunk_fast(record, n_samples, vcf_in=None, chrom=None, specie="|", individua
 
 def read_len_distrib(filename, minlen=35, maxlen=100):
     """Reads a tsv file with counts of read per length
-    
+
     Parameters
     ----------
     filename : str
@@ -261,28 +285,33 @@ def read_len_distrib(filename, minlen=35, maxlen=100):
         minimum length for the distribution
     maxlen : int
         maximum length for the distribution
-        
+
     Returns
     -------
     list of float
         The computed proportion of each read length
     """
     from csv import reader
-    with open(filename, 'r', newline='') as csvfile:
-        csvreader = reader(csvfile, delimiter='\t')
+
+    with open(filename, "r", newline="") as csvfile:
+        csvreader = reader(csvfile, delimiter="\t")
         first_row = csvreader.__next__()
-        read_distrib = [0] * int(first_row[1])+[int(first_row[0])]
+        read_distrib = [0] * int(first_row[1]) + [int(first_row[0])]
         read_distrib.extend([int(row[0]) for row in csvreader])
     if len(read_distrib) < maxlen:
-        print("Read length distribution provides values only until",
-              len(read_distrib), "; expected:", maxlen)
-    s = sum(read_distrib[minlen:maxlen+1])
-    return [r / s for r in read_distrib[minlen:maxlen+1]]
+        print(
+            "Read length distribution provides values only until",
+            len(read_distrib),
+            "; expected:",
+            maxlen,
+        )
+    s = sum(read_distrib[minlen : maxlen + 1])
+    return [r / s for r in read_distrib[minlen : maxlen + 1]]
 
 
 def estimate_read_distribution(file_in, num_seq, n_chromosomes=None):
     """Reads a fasta file and computes the number of sequences to extract per chromosome (relative to chromosome length)
-    
+
     Parameters
     ----------
     file_in : str
@@ -291,7 +320,7 @@ def estimate_read_distribution(file_in, num_seq, n_chromosomes=None):
         The total number of sequences you want to sample.
     n_chromosomes : int
         If you want to take only the first *n* chromosomes of your dataset.
-    
+
     Returns
     -------
     list of int
@@ -299,36 +328,37 @@ def estimate_read_distribution(file_in, num_seq, n_chromosomes=None):
     """
     try:
         with pysam.FastaFile(file_in) as fa:
-            print("The file contains", fa.nreferences,
-                  "sequences", file=sys.stderr)
+            print("The file contains", fa.nreferences, "sequences", file=sys.stderr)
             if num_seq:
                 if n_chromosomes:
-                    print("Working only with the first",
-                          n_chromosomes, file=sys.stderr)
+                    print("Working only with the first", n_chromosomes, file=sys.stderr)
                     full_size = sum(fa.lengths[:n_chromosomes])
                     reads_per_chrom = [
-                        int(s / full_size * num_seq) + 1 for s in fa.lengths[:n_chromosomes]]
+                        int(s / full_size * num_seq) + 1
+                        for s in fa.lengths[:n_chromosomes]
+                    ]
                 else:
                     n_chromosomes = len(fa.lengths)
                     full_size = sum(fa.lengths)
                     reads_per_chrom = [
-                        int(s / full_size * num_seq) + 1 for s in fa.lengths]
+                        int(s / full_size * num_seq) + 1 for s in fa.lengths
+                    ]
     except OSError:  # fasta is not indexed do a naive fallback
-        print("Error, fasta file not indexed, doing naive sampling...",
-              file=sys.stderr)
+        print("Error, fasta file not indexed, doing naive sampling...", file=sys.stderr)
         if n_chromosomes:
-            reads_per_chrom = [
-                int(num_seq / n_chromosomes) + 1] * n_chromosomes
+            reads_per_chrom = [int(num_seq / n_chromosomes) + 1] * n_chromosomes
         else:
             print(
-                "Naive sampling needs the option --chromosomes...Aborting...", file=sys.stderr)
+                "Naive sampling needs the option --chromosomes...Aborting...",
+                file=sys.stderr,
+            )
             sys.exit(1)
     # our samplig tends to slightly over sample, readjust by removing reads on random chromosomes
     extra_samples = sum(reads_per_chrom) - num_seq
-    for idx in [random.randint(0, n_chromosomes-1) for _ in range(extra_samples)]:
+    for idx in [random.randint(0, n_chromosomes - 1) for _ in range(extra_samples)]:
         # some scaffolds are so small that the don't even get a read to sample.
         while reads_per_chrom[idx] == 0:
-            idx = random.randint(0, n_chromosomes-1)
+            idx = random.randint(0, n_chromosomes - 1)
         reads_per_chrom[idx] -= 1
     return reads_per_chrom
 
@@ -338,9 +368,10 @@ def estimate_read_distribution(file_in, num_seq, n_chromosomes=None):
 def _ret_file(f):
     yield f
 
+
 def read_mutation_matrix(file_in):
     """Create a table from a mutation matrix provided by SNPad
-    
+
     Returns
     -------
     tbl : Pandas.table
@@ -349,60 +380,97 @@ def read_mutation_matrix(file_in):
         The list contains the highest probability for which we can have a mutation on a given position.
         Used to optimize the computation when we draw for a mutation.
     """
-    t = pd.read_table(file_in, sep="\t",
-                      header=None, names=["profile", "from", "to", "prob"])
-    tbl = pd.pivot_table(t, values='prob', index=[
-                          'profile', 'to'], columns=['from'], aggfunc=np.sum)
+    t = pd.read_table(
+        file_in, sep="\t", header=None, names=["profile", "from", "to", "prob"]
+    )
+    tbl = pd.pivot_table(
+        t, values="prob", index=["profile", "to"], columns=["from"], aggfunc=np.sum
+    )
     # contains, for each nc, the highest probability for which we can have
     # a mutation
     # e.g.
     # 'A': 0.00797800000000004, -> ~0.79% chances to have a mutation, any sampled number above this would result in keeping the nc
     # this allows us to optimize the algorithm by not using the lookup
     # table and directly keep the nc.
-    sn = [{nc: prob for nc, prob in zip(tbl.columns,
-                                                  [tbl[x][pos][x] for x in tbl])} for pos in range(31)]
+    sn = [
+        {nc: prob for nc, prob in zip(tbl.columns, [tbl[x][pos][x] for x in tbl])}
+        for pos in range(31)
+    ]
     return tbl, sn
+
 
 def _main():
     random.seed()
     # Process command line
-    parser = argparse.ArgumentParser(description='Split a genome into chuncks')
-    parser.add_argument('--num_seq', default=0, type=int,
-                        help='Number of sequences to output')
+    parser = argparse.ArgumentParser(description="Split a genome into chuncks")
     parser.add_argument(
-        '--outfile',  help='Fasta file where to extract sequence')
-    parser.add_argument('--specie',  help='Specie Taxa')
+        "--num_seq", default=0, type=int, help="Number of sequences to output"
+    )
+    parser.add_argument("--outfile", help="Fasta file where to extract sequence")
+    parser.add_argument("--specie", help="Specie Taxa")
+    parser.add_argument("file_in", metavar="genome.fa[.gz], [bgzip] and indexed")
     parser.add_argument(
-        'file_in', metavar="genome.fa[.gz], [bgzip] and indexed")
-    parser.add_argument('--chromosomes', type=int,
-                        help='How many chromosomes are expected', default=0)
-    parser.add_argument('--minlen', type=int,
-                        help='Minimum read length (lengths are sampled uniformly)', default=35)
-    parser.add_argument('--maxlen', type=int,
-                        help='Maximum read length (lengths are sampled uniformly)', default=100)
-    parser.add_argument('--threads', type=int, default=multiprocessing.cpu_count(),
-                        help="Specify number of threads to use")
+        "--chromosomes", type=int, help="How many chromosomes are expected", default=0
+    )
+    parser.add_argument(
+        "--minlen",
+        type=int,
+        help="Minimum read length (lengths are sampled uniformly)",
+        default=35,
+    )
+    parser.add_argument(
+        "--maxlen",
+        type=int,
+        help="Maximum read length (lengths are sampled uniformly)",
+        default=100,
+    )
+    parser.add_argument(
+        "--threads",
+        type=int,
+        default=multiprocessing.cpu_count(),
+        help="Specify number of threads to use",
+    )
     # TODO, control for option dependency properly
-    parser.add_argument('--deaminate', type=int,
-                        help='How many bases should be deaminated of each end', default=0)
-    parser.add_argument('--unif', type=float,
-                        help='Add mutations uniformly distributed', default=0.0)
-    parser.add_argument('--individual', type=int,
-                        help='The individual used for variation in you VCF', default=0)
     parser.add_argument(
-        '--length', help='2 columns (#reads, length) TSV file containing read length distribution', default=0.0)
+        "--deaminate",
+        type=int,
+        help="How many bases should be deaminated of each end",
+        default=0,
+    )
+    parser.add_argument(
+        "--unif", type=float, help="Add mutations uniformly distributed", default=0.0
+    )
+    parser.add_argument(
+        "--individual",
+        type=int,
+        help="The individual used for variation in you VCF",
+        default=0,
+    )
+    parser.add_argument(
+        "--length",
+        help="2 columns (#reads, length) TSV file containing read length distribution",
+        default=0.0,
+    )
     # either provide a VCF OR a substitution matrix, you probably don't want
     # to deaminate if you choose the latter
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
-        '--vcf',  help='VCF containing the variation to be included in the samples')
-    group.add_argument("--substitution_file", type=open,
-                       help='File containing the substitution probability matrix')
+        "--vcf", help="VCF containing the variation to be included in the samples"
+    )
+    group.add_argument(
+        "--substitution_file",
+        type=open,
+        help="File containing the substitution probability matrix",
+    )
     sorting = parser.add_mutually_exclusive_group()
-    sorting.add_argument('--sorted', action='store_true',
-                         help='Natural sort the reads by chromosome name, position and length')
-    sorting.add_argument('--shuffled', action='store_true',
-                         help='Output shuffled reads')
+    sorting.add_argument(
+        "--sorted",
+        action="store_true",
+        help="Natural sort the reads by chromosome name, position and length",
+    )
+    sorting.add_argument(
+        "--shuffled", action="store_true", help="Output shuffled reads"
+    )
     args = parser.parse_args()
 
     print("Loading dataset...", end="", file=sys.stderr)
@@ -411,17 +479,22 @@ def _main():
         global tbl
         global same_nuc
         tbl, same_nuc = read_mutation_matrix(args.substitution_file)
-        for nc in 'ACGT':
+        for nc in "ACGT":
             for pos in range(31):
                 # do cumsum on sorted values, assuming that the highest proba is the nc itself: C->C, A->A, etc
-                tbl[nc][pos] = [tbl[nc][pos].sort_values(ascending=False).cumsum()[
-                    to] for to in tbl.columns]
+                tbl[nc][pos] = [
+                    tbl[nc][pos].sort_values(ascending=False).cumsum()[to]
+                    for to in tbl.columns
+                ]
     num_reads_to_sample = estimate_read_distribution(
-        args.file_in, args.num_seq, args.chromosomes)
+        args.file_in, args.num_seq, args.chromosomes
+    )
     specie = "|"
     if args.specie:
-        specie += args.specie.replace(' ', "_")+"|"
-    with gzip.open(args.file_in, "rt") if args.file_in.endswith("gz") else _ret_file(args.file_in) as file_in, open(args.outfile, 'w') if args.outfile else sys.stdout as file_out:
+        specie += args.specie.replace(" ", "_") + "|"
+    with gzip.open(args.file_in, "rt") if args.file_in.endswith("gz") else _ret_file(
+        args.file_in
+    ) as file_in, open(args.outfile, "w") if args.outfile else sys.stdout as file_out:
         all_chunks = []
         vcf_in = args.substitution_file  # will be none if we use a VCF file
         chromosomes = []
@@ -438,30 +511,54 @@ def _main():
                 if num_record > args.chromosomes - 1:  # num_record is 0-based
                     # assume the genome is sorted, with chromosomes first...
                     break
-                print("Parsing chromosome", num_record +
-                      1, end="\r", file=sys.stderr)
+                print("Parsing chromosome", num_record + 1, end="\r", file=sys.stderr)
             if num_reads_to_sample[num_record] == 0:  # skip this sequence
                 continue
             chrom = p.search(record.description)
             if not chrom:
-                chrom = (get_chrom(record), get_chrom(record))  # in case of scaffold genome
-            else: # save both the id and chromosome info from fasta description
-                chrom = (get_chrom(record), chrom.group()[len('chromosome '):-1])
+                chrom = (
+                    get_chrom(record),
+                    get_chrom(record),
+                )  # in case of scaffold genome
+            else:  # save both the id and chromosome info from fasta description
+                chrom = (get_chrom(record), chrom.group()[len("chromosome ") : -1])
             if args.vcf or args.substitution_file:
                 # we write chromosomes in the same order as the given input.
                 if not args.shuffled and not args.sorted:
-                    all_chunks = sort_recs(chunk_fast(record, num_reads_to_sample[
-                        num_record], vcf_in, chrom, specie, unif=args.unif, deaminate=args.deaminate, len_distrib=args.length,
-                        minlength=args.minlen, maxlength=args.maxlen, nthreads=args.threads))
+                    all_chunks = sort_recs(
+                        chunk_fast(
+                            record,
+                            num_reads_to_sample[num_record],
+                            vcf_in,
+                            chrom,
+                            specie,
+                            unif=args.unif,
+                            deaminate=args.deaminate,
+                            len_distrib=args.length,
+                            minlength=args.minlen,
+                            maxlength=args.maxlen,
+                            nthreads=args.threads,
+                        )
+                    )
                     SeqIO.write(all_chunks, file_out, "fasta")
                 else:
                     chromosomes.append(chrom)
-                    all_chunks += chunk_fast(record, num_reads_to_sample[
-                        num_record], vcf_in, chrom, specie, unif=args.unif, deaminate=args.deaminate, len_distrib=args.length, minlength=args.minlen, maxlength=args.maxlen, nthreads=args.threads)
+                    all_chunks += chunk_fast(
+                        record,
+                        num_reads_to_sample[num_record],
+                        vcf_in,
+                        chrom,
+                        specie,
+                        unif=args.unif,
+                        deaminate=args.deaminate,
+                        len_distrib=args.length,
+                        minlength=args.minlen,
+                        maxlength=args.maxlen,
+                        nthreads=args.threads,
+                    )
 
             if num_record % 100 == 99:  # show progress
-                print(num_record + 1, "sequences parsed...",
-                      end="\r", file=sys.stderr)
+                print(num_record + 1, "sequences parsed...", end="\r", file=sys.stderr)
         if args.vcf:
             vcf_in.close()
         print("\nDone\nWritting down records...", end="", file=sys.stderr)
@@ -470,9 +567,15 @@ def _main():
         if args.sorted:  # we will do a natural sort on the chromosomes
             # if we find a chromosome in the description part of the header
             # use it for sorting, otherwise sort with fasta id
-            chromosomes.sort(key=lambda key: [int(text) if text.isdigit(
-            ) else text for text in re.split(r'([0-9]+)', key[1])])
-            all_chunks = sort_recs(all_chunks, chromosome_list=[c[0] for c in chromosomes])
+            chromosomes.sort(
+                key=lambda key: [
+                    int(text) if text.isdigit() else text
+                    for text in re.split(r"([0-9]+)", key[1])
+                ]
+            )
+            all_chunks = sort_recs(
+                all_chunks, chromosome_list=[c[0] for c in chromosomes]
+            )
         if args.shuffled or args.sorted:
             SeqIO.write(all_chunks, file_out, "fasta")
     print("Done", file=sys.stderr)
