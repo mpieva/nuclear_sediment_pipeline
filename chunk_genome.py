@@ -556,7 +556,6 @@ def _main():
                         maxlength=args.maxlen,
                         nthreads=args.threads,
                     )
-
             if num_record % 100 == 99:  # show progress
                 print(num_record + 1, "sequences parsed...", end="\r", file=sys.stderr)
         if args.vcf:
