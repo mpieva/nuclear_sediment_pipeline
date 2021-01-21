@@ -12,8 +12,8 @@ from pathlib import Path
 import os
 import json
 import contextlib
-#grep 'scientific name' ~/MetaGen/references/names.dmp |cut -d'|' -f 1,2>names_trimmed.dmp
-#cut -d '|' -f 1,2,3 ~/MetaGen/references/naodes.dmp >nodes_trimmed.dmp
+#grep 'scientific name' names.dmp |cut -d'|' -f 1,2 |gzip -c >names_trimmed.dmp
+#cut -d '|' -f 1,2,3 nodes.dmp|gzip -c >nodes_trimmed.dmp
 
 # remember to use filtered nodes.dmp and names.dmp
 def load_taxonomy(db_prefix):
