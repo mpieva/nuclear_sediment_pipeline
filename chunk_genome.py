@@ -483,10 +483,8 @@ def _main():
         for nc in "ACGT":
             for pos in range(31):
                 # do cumsum on sorted values, assuming that the highest proba is the nc itself: C->C, A->A, etc
-                tbl[nc][pos] = [
-                    tbl[nc][pos].sort_values(ascending=False).cumsum()[to]
-                    for to in tbl.columns
-                ]
+                tbl.loc[pos][nc] = \
+                    tbl.loc[pos][nc].sort_values(ascending=False).cumsum().sort_index()
     num_reads_to_sample = estimate_read_distribution(
         args.file_in, args.num_seq, args.chromosomes
     )
