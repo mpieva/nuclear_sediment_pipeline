@@ -405,7 +405,7 @@ def _main():
     # Process command line
     parser = argparse.ArgumentParser(description="Split a genome into chuncks")
     parser.add_argument(
-        "--num_seq", default=0, type=int, help="Number of sequences to output"
+        "--num_seq", default=1, type=int, help="Number of sequences to output"
     )
     parser.add_argument("--outfile", help="Fasta file where to extract sequence")
     parser.add_argument("--specie", help="Specie Taxa")
