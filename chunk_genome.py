@@ -1,8 +1,8 @@
 """Set of functions used to generate reads derived from a set of sequences (i.e. full genome FASTA file).
 
-* You can specify a mutation rate, a VCF file in order to add known SNPs, or a mutation matrix obtained from SNPad.
-* You can specify a length distribution file otherwise reads length will be uniformly sampled.
-* Works is processed in parallel in order to decrease computation time.
+* You can specify a mutation rate, a VCF file in order to add known SNPs, or a mutation matrix obtained from snpAD, Kay Prüfer, snpAD: an ancient DNA genotype caller, Bioinformatics, Volume 34, Issue 24, 15 December 2018, Pages 4165–4171, https://doi.org/10.1093/bioinformatics/bty507.
+* Default read length distribution is derived from empirical data, but you can provide your own or length will be uniformly sampled.
+* Work is processed in parallel in order to decrease computation time.
 
 """
 
@@ -130,7 +130,7 @@ def simulate_deamination(sequence, nbases=3):
 
 
 def mutate_unif(sequence, unif):
-    """Add mutations uniformely throughout the sequence
+    """Add mutations uniformly throughout the sequence
 
     Parameters
     ----------
@@ -443,7 +443,7 @@ def _main():
     parser.add_argument(
         "--individual",
         type=int,
-        help="The individual used for variation in you VCF",
+        help="The individual used for variation in your VCF",
         default=0,
     )
     parser.add_argument(
