@@ -1,6 +1,6 @@
 """Set of functions used to generate reads derived from a set of sequences (i.e. full genome FASTA file).
 
-* You can specify a mutation rate, a VCF file in order to add known SNPs, or a mutation matrix obtained from snpAD, Kay Prüfer, snpAD: an ancient DNA genotype caller, Bioinformatics, Volume 34, Issue 24, 15 December 2018, Pages 4165–4171, https://doi.org/10.1093/bioinformatics/bty507.
+* You can specify a mutation rate, a VCF file in order to add known SNPs, or a mutation matrix obtained from snpAD, :title-reference:`Kay Prüfer, snpAD: an ancient DNA genotype caller, Bioinformatics, Volume 34, Issue 24, 15 December 2018, Pages 4165–4171, https://doi.org/10.1093/bioinformatics/bty507`.
 * Default read length distribution is derived from empirical data, but you can provide your own or length will be uniformly sampled.
 * Work is processed in parallel in order to decrease computation time.
 
