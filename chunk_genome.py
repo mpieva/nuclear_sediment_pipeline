@@ -188,6 +188,7 @@ def chunk_fast(
     unif: float, optional
         The mutaion rate, will be added on top of VCF/substitution Matrix
     len_distrib: str, optional
+        If False, uniform distribution will be used
     deaminate: int, optional
     minlength: int, optional
     maxlength: int, optional
@@ -449,7 +450,7 @@ def _main():
     parser.add_argument(
         "--length",
         help="2 columns (#reads, length) TSV file containing read length distribution",
-        default=0.0,
+        default='data/length_distribution.tsv',
     )
     # either provide a VCF OR a substitution matrix, you probably don't want
     # to deaminate if you choose the latter
@@ -459,7 +460,7 @@ def _main():
     )
     group.add_argument(
         "--substitution_file",
-        type=open,
+        type=str,
         help="File containing the substitution probability matrix",
     )
     sorting = parser.add_mutually_exclusive_group()
