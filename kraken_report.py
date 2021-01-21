@@ -33,13 +33,13 @@ def load_taxonomy(db_prefix):
         not os.path.exists(db_prefix+"/taxonomy/child_lists.json") or \
         not os.path.exists(db_prefix+"/taxonomy/parent_map.json"):
         print ("Map files don't exist, creating json...", file=sys.stderr)
-        with open(db_prefix+"/taxonomy/names_trimmed.dmp", 'r') as name_file:
+        with gzip.open(db_prefix+"/taxonomy/names_trimmed.dmp.gz", 'rt') as name_file:
             for line in name_file:
                 node_id, name = line.strip().split('|')
                 node_id = node_id.strip()
                 name = name.strip()
                 name_map[node_id] = name
-        with open(db_prefix+"/taxonomy/nodes_trimmed.dmp", 'r') as nodes_file:
+        with gzip.open(db_prefix+"/taxonomy/nodes_trimmed.dmp.gz", 'rt') as nodes_file:
             for line in nodes_file:
                 node_id, parent_id, rank = line.strip().split('|')
                 node_id = node_id.strip()
