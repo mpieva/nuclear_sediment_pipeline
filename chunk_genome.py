@@ -450,7 +450,7 @@ def _main():
     parser.add_argument(
         "--length",
         help="2 columns (#reads, length) TSV file containing read length distribution",
-        default='data/length_distribution.tsv',
+        default=False,
     )
     # either provide a VCF OR a substitution matrix, you probably don't want
     # to deaminate if you choose the latter
