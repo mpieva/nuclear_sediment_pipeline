@@ -52,3 +52,5 @@ unpack
 `cd metagen_utils-VERSION`
 
 `python setup.py build_sphinx`
+
+[![DOI](https://zenodo.org/badge/302640733.svg)](https://zenodo.org/badge/latestdoi/302640733)
